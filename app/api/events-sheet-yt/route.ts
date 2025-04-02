@@ -15,6 +15,7 @@ const CALENDAR_IDS: { [key: string]: string | undefined } = {
   Salman: process.env.Salman_Calendar_ID,
   Vivek: process.env.Vivek_Calendar_ID,
   Jyoti: process.env.Jyoti_Calendar_ID,
+  Ravi: process.env.Ravi_Calendar_ID,
   Govt: process.env.Govt_Calendar_ID,
 };
 
