@@ -135,7 +135,7 @@ export default function EventsSheetYt() {
 
   const handleEventAction = async (
     endpoint: string,
-    data: any,
+    data: Record<string, unknown>, // Replace `any` with `Record<string, unknown`
     successMessage: string,
     errorMessage: string
   ) => {
