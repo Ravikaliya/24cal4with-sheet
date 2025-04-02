@@ -17,8 +17,9 @@ eslintConfig.push({
   rules: {
     'react/no-unescaped-entities': 'off',
     '@next/next/no-page-custom-font': 'off',
-    'no-console': 'off', // Example: Disables the 'no-console' rule
-    'react/prop-types': 'off', // Example: Disables the 'react/prop-types' rule
+    'no-console': 'off',
+    'react/prop-types': 'off',
+    '@typescript-eslint/no-explicit-any': 'off', // Disables the 'no-explicit-any' rule
   },
 });
 
