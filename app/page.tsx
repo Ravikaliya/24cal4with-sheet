@@ -279,7 +279,7 @@ export default function EventsSheetYt() {
         </div>
       </div>
 
-      <div className="grid grid-cols-4 md:grid-cols-6 gap-4">
+      <div className="grid md:grid-cols-6 gap-4">
         {Array.from({ length: 24 }).map((_, index) => {
           const event = events[index] || {
             start: new Date().toISOString().replace(/:[0-9]+(\.[0-9]+)?$/, `:${String(index).padStart(2, "0")}:00`),
