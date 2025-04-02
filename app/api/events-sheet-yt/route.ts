@@ -1,4 +1,3 @@
-// events-sheet-yt.ts (API route)
 import { google, calendar_v3 } from "googleapis";
 import { join } from "path";
 import { NextResponse } from "next/server";
@@ -21,6 +20,15 @@ const CALENDAR_IDS: { [key: string]: string | undefined } = {
 
 const SHEET_NAMES = Object.keys(CALENDAR_IDS).filter((name) => CALENDAR_IDS[name]);
 
+interface Event {
+  start: string;
+  end: string;
+  title: string;
+  youtubeHindi: string;
+  youtubeEnglish: string;
+  timeZone: string;
+}
+
 const authenticate = async () => {
   try {
     return new google.auth.GoogleAuth({
@@ -33,12 +41,12 @@ const authenticate = async () => {
   }
 };
 
-const ensureSheetsExist = async (sheets: any, spreadsheetId: string) => {
+const ensureSheetsExist = async (sheets: ReturnType<typeof google.sheets>, spreadsheetId: string) => {
   try {
     const response = await sheets.spreadsheets.get({
       spreadsheetId,
     });
-    const existingSheets = response.data.sheets?.map((sheet: any) => sheet.properties.title) || [];
+    const existingSheets = response.data.sheets?.map((sheet) => sheet.properties?.title) || [];
 
     for (const sheetName of SHEET_NAMES) {
       if (!existingSheets.includes(sheetName)) {
@@ -112,8 +120,8 @@ export async function GET(request: Request) {
       });
 
       const rows = response.data.values || [];
-      const events = rows.slice(1).map((row, index) => {
-        const [timeRange, title, youtubeHindi, youtubeEnglish] = row;
+      const events: Event[] = rows.slice(1).map((row, index) => {
+        const [timeRange, title, youtubeHindi, youtubeEnglish] = row as [string, string, string, string];
         const startHour = String(index).padStart(2, "0");
         const defaultTimeRange = `${startHour}:00 - ${startHour}:50`;
         const [startTime, endTime] = (timeRange || defaultTimeRange).split(" - ");
@@ -161,7 +169,7 @@ export async function POST(request: Request) {
     );
   }
 
-  let body;
+  let body: { action: string; events?: Event[] };
   try {
     body = await request.json();
   } catch (error) {
@@ -247,7 +255,7 @@ export async function POST(request: Request) {
       }
 
       const sheetRange = `${name}!A2:D${events.length + 1}`;
-      const sheetValues = events.map((evt: any, index: number) => {
+      const sheetValues = events.map((evt, index) => {
         const startHour = String(index).padStart(2, "0");
         const timeRange = `${startHour}:00 - ${startHour}:50`;
         return [timeRange, evt.title, evt.youtubeHindi || "", evt.youtubeEnglish || ""];
@@ -270,7 +278,6 @@ export async function POST(request: Request) {
     if (action === "removeAll") {
       console.log(`Removing all events from calendar: ${calendarId}`);
       
-      // Fetch all events with pagination
       let pageToken: string | undefined = undefined;
       const allEvents: calendar_v3.Schema$Event[] = [];
       
@@ -287,7 +294,6 @@ export async function POST(request: Request) {
 
       console.log(`Found ${allEvents.length} events to delete from calendar: ${calendarId}`);
 
-      // Delete all fetched events
       for (const evt of allEvents) {
         if (evt.id) {
           try {
