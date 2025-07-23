@@ -85,7 +85,7 @@ export default function EventsSheetYt() {
     fetchSheetNames();
 
     updateEvents(selectedDate);
-  }, [selectedDate]);
+  }, []);
 
   useEffect(() => {
     if (selectedName !== "Select a sheet") {

@@ -2,6 +2,7 @@ import { google, calendar_v3 } from "googleapis";
 import { join } from "path";
 import { NextResponse } from "next/server";
 import { existsSync } from 'fs';
+
 const KEYFILEPATH = join(process.cwd(), "lib", "service-account-key.json");
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar",
@@ -12,7 +13,7 @@ const CALENDAR_IDS: { [key: string]: string | undefined } = {
   Achal: process.env.Achal_Calendar_ID,
   Neeraj: process.env.Neeraj_Calendar_ID,
   Salman: process.env.Salman_Calendar_ID,
-  Vivek: "5505023bb6a4f113a246f96b42d58030a696b957aeee438346699b1a82c85c9d@group.calendar.google.com", // Updated with provided ID
+  Vivek: process.env.Vivek_Calendar_ID, // Updated with provided ID
   Jyoti: process.env.Jyoti_Calendar_ID,
   Ravi: process.env.Ravi_Calendar_ID,
   Govt: process.env.Govt_Calendar_ID,
@@ -43,8 +44,8 @@ const authenticate = async () => {
       console.error("Error details:", error.stack);
     }
     return NextResponse.json(
-      {
-        error: "Failed to authenticate with Google APIs",
+      { 
+        error: "Failed to authenticate with Google APIs", 
         details: error instanceof Error ? error.message : String(error),
         keyFilePath: KEYFILEPATH,
         keyFileExists: existsSync(KEYFILEPATH)
