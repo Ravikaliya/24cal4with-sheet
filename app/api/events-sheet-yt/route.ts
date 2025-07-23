@@ -1,7 +1,7 @@
 import { google, calendar_v3 } from "googleapis";
 import { join } from "path";
 import { NextResponse } from "next/server";
-
+import { existsSync } from 'fs';
 const KEYFILEPATH = join(process.cwd(), "lib", "service-account-key.json");
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar",
@@ -47,7 +47,7 @@ const authenticate = async () => {
         error: "Failed to authenticate with Google APIs",
         details: error instanceof Error ? error.message : String(error),
         keyFilePath: KEYFILEPATH,
-        keyFileExists: require('fs').existsSync(KEYFILEPATH)
+        keyFileExists: existsSync(KEYFILEPATH)
       },
       { status: 500 }
     );
