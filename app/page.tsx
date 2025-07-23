@@ -33,23 +33,52 @@ const initialEventTitles: string[] = [
   "AWS", "Docker",
 ];
 
+// Clipboard fallback function
+const copyToClipboard = async (text: string) => {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied to clipboard!");
+    } else {
+      // Fallback for non-secure contexts or unsupported browsers
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+      toast.success("Copied to clipboard using fallback!");
+    }
+  } catch (error) {
+    toast.error("Failed to copy to clipboard");
+    console.error("Clipboard error:", error);
+  }
+};
+
 export default function EventsSheetYt() {
   const [selectedEvents, setSelectedEvents] = useState<Event[]>([]);
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [selectedName, setSelectedName] = useState<string>("Select a sheet");
   const [events, setEvents] = useState<Event[]>([]);
   const [bulkInput, setBulkInput] = useState<string>("");
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0]);
+
+  // Set default date to tomorrow (July 19, 2025)
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const [selectedDate, setSelectedDate] = useState<string>(tomorrow.toISOString().split("T")[0]);
 
   useEffect(() => {
     const fetchSheetNames = async () => {
       try {
         const res = await fetch("/api/events-sheet-yt?action=getSheetNames");
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.error || "Failed to fetch sheet names");
+        }
         const data = await res.json();
-        if (res.ok) setSheetNames(data.sheetNames);
-        else toast.error("Failed to fetch sheet names");
+        setSheetNames(data.sheetNames || []);
       } catch (error) {
-        toast.error("Error fetching sheet names");
+        toast.error(error instanceof Error ? error.message : "Error fetching sheet names");
         console.error(error);
       }
     };
@@ -65,34 +94,34 @@ export default function EventsSheetYt() {
           const res = await fetch(
             `/api/events-sheet-yt?action=getEvents&sheetName=${encodeURIComponent(selectedName)}&date=${selectedDate}`
           );
-          const data = await res.json();
-          if (res.ok) {
-            const fetchedEvents = data.events;
-            const adjustedEvents = Array.from({ length: 24 }).map((_, index) => {
-              const startHour = String(index).padStart(2, "0");
-              const event = fetchedEvents[index] || {
-                title: initialEventTitles[index] || "Empty Slot",
-                youtubeHindi: "",
-                youtubeEnglish: "",
-                timeZone: "Asia/Kolkata",
-              };
-              const title = event.title || initialEventTitles[index] || "Empty Slot";
-              return {
-                ...event,
-                start: `${selectedDate}T${startHour}:00:00`,
-                end: `${selectedDate}T${startHour}:50:00`,
-                title,
-                youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
-                youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
-                timeZone: event.timeZone || "Asia/Kolkata",
-              };
-            });
-            setEvents(adjustedEvents);
-          } else {
-            toast.error("Failed to fetch events");
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.error || "Failed to fetch events");
           }
+          const data = await res.json();
+          const fetchedEvents = data.events || [];
+          const adjustedEvents = Array.from({ length: 24 }).map((_, index) => {
+            const startHour = String(index).padStart(2, "0");
+            const event = fetchedEvents[index] || {
+              title: initialEventTitles[index] || "Empty Slot",
+              youtubeHindi: "",
+              youtubeEnglish: "",
+              timeZone: "Asia/Kolkata",
+            };
+            const title = event.title || initialEventTitles[index] || "Empty Slot";
+            return {
+              ...event,
+              start: `${selectedDate}T${startHour}:00:00`,
+              end: `${selectedDate}T${startHour}:50:00`,
+              title,
+              youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
+              youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
+              timeZone: event.timeZone || "Asia/Kolkata",
+            };
+          });
+          setEvents(adjustedEvents);
         } catch (error) {
-          toast.error("Error fetching events");
+          toast.error(error instanceof Error ? error.message : "Error fetching events");
           console.error(error);
         }
       };
@@ -132,7 +161,7 @@ export default function EventsSheetYt() {
         body: JSON.stringify(data),
       });
       const result = await res.json();
-      if (!res.ok) throw new Error(result.message || errorMessage);
+      if (!res.ok) throw new Error(result.error || errorMessage);
       toast.success(successMessage);
     } catch (error) {
       toast.error((error instanceof Error ? error.message : String(error)) || errorMessage);
@@ -229,18 +258,23 @@ export default function EventsSheetYt() {
     toast.success("Input cleared and events reset");
   };
 
+  // Handle clicking on YouTube links to copy them
+  const handleLinkClick = (url: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    copyToClipboard(url);
+  };
+
   return (
     <div className="p-4 h-dvh">
       <div className="mb-4">
         <div className="flex flex-wrap lg:flex-nowrap gap-2 items-center">
-
           <Input
             className="w-full"
             value={bulkInput}
             onChange={(e) => setBulkInput(e.target.value)}
             placeholder="Paste comma-separated data here"
           />
-                    <CalendarForm 
+          <CalendarForm
             value={selectedDate}
             onChange={(date) => {
               setSelectedDate(date);
@@ -281,10 +315,18 @@ export default function EventsSheetYt() {
                   placeholder="Enter event title"
                 />
                 <div className="flex gap-2">
-                  <a href={event.youtubeHindi} target="_blank" rel="noopener noreferrer" className="text-blue-500 text-sm">
+                  <a
+                    href={event.youtubeHindi}
+                    onClick={(e) => handleLinkClick(event.youtubeHindi, e)}
+                    className="text-blue-500 text-sm"
+                  >
                     <Badge variant="outline">H</Badge>
                   </a>
-                  <a href={event.youtubeEnglish} target="_blank" rel="noopener noreferrer" className="text-blue-500 text-sm">
+                  <a
+                    href={event.youtubeEnglish}
+                    onClick={(e) => handleLinkClick(event.youtubeEnglish, e)}
+                    className="text-blue-500 text-sm"
+                  >
                     <Badge variant="outline">E</Badge>
                   </a>
                 </div>

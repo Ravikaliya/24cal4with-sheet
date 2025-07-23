@@ -12,7 +12,7 @@ const CALENDAR_IDS: { [key: string]: string | undefined } = {
   Achal: process.env.Achal_Calendar_ID,
   Neeraj: process.env.Neeraj_Calendar_ID,
   Salman: process.env.Salman_Calendar_ID,
-  Vivek: process.env.Vivek_Calendar_ID,
+  Vivek: "5505023bb6a4f113a246f96b42d58030a696b957aeee438346699b1a82c85c9d@group.calendar.google.com", // Updated with provided ID
   Jyoti: process.env.Jyoti_Calendar_ID,
   Ravi: process.env.Ravi_Calendar_ID,
   Govt: process.env.Govt_Calendar_ID,
@@ -31,13 +31,26 @@ interface Event {
 
 const authenticate = async () => {
   try {
-    return new google.auth.GoogleAuth({
+    const auth = new google.auth.GoogleAuth({
       keyFile: KEYFILEPATH,
       scopes: SCOPES,
     });
+    console.log("Authentication successful");
+    return auth;
   } catch (error) {
     console.error("Authentication failed:", error);
-    throw new Error("Failed to authenticate with Google APIs");
+    if (error instanceof Error) {
+      console.error("Error details:", error.stack);
+    }
+    return NextResponse.json(
+      {
+        error: "Failed to authenticate with Google APIs",
+        details: error instanceof Error ? error.message : String(error),
+        keyFilePath: KEYFILEPATH,
+        keyFileExists: require('fs').existsSync(KEYFILEPATH)
+      },
+      { status: 500 }
+    );
   }
 };
 
@@ -78,7 +91,7 @@ const ensureSheetsExist = async (sheets: ReturnType<typeof google.sheets>, sprea
     }
   } catch (error) {
     console.error("Error ensuring sheets exist:", error);
-    throw error;
+    throw new Error("Failed to ensure sheets exist");
   }
 };
 
@@ -87,17 +100,26 @@ export async function GET(request: Request) {
   const action = searchParams.get("action");
 
   const auth = await authenticate();
+  if (auth instanceof NextResponse) return auth; // Return error response if authentication fails
+
   const sheets = google.sheets({ version: "v4", auth });
 
   const spreadsheetId = process.env.SPREADSHEET_ID;
   if (!spreadsheetId) {
     return NextResponse.json(
-      { message: "SPREADSHEET_ID is not set in environment variables" },
+      { error: "SPREADSHEET_ID is not set in environment variables" },
       { status: 500 }
     );
   }
 
-  await ensureSheetsExist(sheets, spreadsheetId);
+  try {
+    await ensureSheetsExist(sheets, spreadsheetId);
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Failed to ensure sheets exist", details: error instanceof Error ? error.message : String(error) },
+      { status: 500 }
+    );
+  }
 
   if (action === "getSheetNames") {
     return NextResponse.json({ sheetNames: SHEET_NAMES });
@@ -107,7 +129,7 @@ export async function GET(request: Request) {
     const sheetName = searchParams.get("sheetName");
     if (!sheetName || !SHEET_NAMES.includes(sheetName)) {
       return NextResponse.json(
-        { message: `Invalid or missing sheet name: ${sheetName}. Expected one of: ${SHEET_NAMES.join(", ")}` },
+        { error: `Invalid or missing sheet name: ${sheetName}. Expected one of: ${SHEET_NAMES.join(", ")}` },
         { status: 400 }
       );
     }
@@ -120,18 +142,23 @@ export async function GET(request: Request) {
       });
 
       const rows = response.data.values || [];
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1); // Set to tomorrow (July 19, 2025)
+      const tomorrowISO = tomorrow.toISOString().split("T")[0]; // Format as YYYY-MM-DD
+
       const events: Event[] = rows.slice(1).map((row, index) => {
         const [timeRange, title, youtubeHindi, youtubeEnglish] = row as [string, string, string, string];
         const startHour = String(index).padStart(2, "0");
         const defaultTimeRange = `${startHour}:00 - ${startHour}:50`;
         const [startTime, endTime] = (timeRange || defaultTimeRange).split(" - ");
-        const today = new Date().toISOString().split("T")[0];
         return {
-          start: `${today}T${startTime}:00`,
-          end: `${today}T${endTime}:00`,
+          start: `${tomorrowISO}T${startTime}:00`,
+          end: `${tomorrowISO}T${endTime}:00`,
           title: title || "",
-          youtubeHindi: youtubeHindi || `https://www.youtube.com/results?search_query=${encodeURIComponent((title || "") + " in Hindi")}`,
-          youtubeEnglish: youtubeEnglish || `https://www.youtube.com/results?search_query=${encodeURIComponent((title || "") + " in English")}`,
+          youtubeHindi:
+            youtubeHindi || `https://www.youtube.com/results?search_query=${encodeURIComponent((title || "") + " in Hindi")}`,
+          youtubeEnglish:
+            youtubeEnglish || `https://www.youtube.com/results?search_query=${encodeURIComponent((title || "") + " in English")}`,
           timeZone: "Asia/Kolkata",
         };
       });
@@ -139,15 +166,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ events });
     } catch (error) {
       console.error(`Error fetching events for ${sheetName}:`, error);
-      if (error instanceof Error && "response" in error) {
-        const apiError = error as any;
-        return NextResponse.json(
-          { message: "Failed to fetch events", error: apiError.response?.data?.error?.message || error.message },
-          { status: apiError.response?.status || 500 }
-        );
-      }
       return NextResponse.json(
-        { message: "Unknown error fetching events", error: String(error) },
+        {
+          error: "Failed to fetch events",
+          details: error instanceof Error ? error.message : String(error),
+        },
         { status: 500 }
       );
     }
@@ -164,7 +187,7 @@ export async function POST(request: Request) {
   if (!calendarId) {
     console.error(`No calendar ID found for name: ${name}`);
     return NextResponse.json(
-      { message: `Invalid or missing calendar ID for ${name}. Check environment variables.` },
+      { error: `Invalid or missing calendar ID for ${name}. Check environment variables.` },
       { status: 400 }
     );
   }
@@ -175,7 +198,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Failed to parse request body:", error);
     return NextResponse.json(
-      { message: "Invalid JSON in request body" },
+      { error: "Invalid JSON in request body", details: error instanceof Error ? error.message : String(error) },
       { status: 400 }
     );
   }
@@ -183,17 +206,19 @@ export async function POST(request: Request) {
   const { action, events } = body;
 
   if (!action) {
-    return NextResponse.json({ message: "Missing action in request body" }, { status: 400 });
+    return NextResponse.json({ error: "Missing action in request body" }, { status: 400 });
   }
 
   const auth = await authenticate();
+  if (auth instanceof NextResponse) return auth; // Return error response if authentication fails
+
   const calendar = google.calendar({ version: "v3", auth });
   const sheets = google.sheets({ version: "v4", auth });
   const spreadsheetId = process.env.SPREADSHEET_ID;
 
   if (!spreadsheetId) {
     return NextResponse.json(
-      { message: "SPREADSHEET_ID is not set in environment variables" },
+      { error: "SPREADSHEET_ID is not set in environment variables" },
       { status: 500 }
     );
   }
@@ -203,7 +228,7 @@ export async function POST(request: Request) {
       if (!events || !Array.isArray(events)) {
         console.error("Invalid or missing events array:", events);
         return NextResponse.json(
-          { message: "Events must be an array" },
+          { error: "Events must be an array" },
           { status: 400 }
         );
       }
@@ -277,16 +302,16 @@ export async function POST(request: Request) {
 
     if (action === "removeAll") {
       console.log(`Removing all events from calendar: ${calendarId}`);
-      
+
       let pageToken: string | undefined = undefined;
       const allEvents: calendar_v3.Schema$Event[] = [];
-      
+
       do {
         const response: calendar_v3.Schema$Events = await calendar.events.list({
           calendarId,
           pageToken,
         }).then(res => res.data);
-        
+
         const events = response.items || [];
         allEvents.push(...events);
         pageToken = response.nextPageToken ?? undefined;
@@ -316,23 +341,19 @@ export async function POST(request: Request) {
         range: `${name}!A2:D`,
       });
 
-      return NextResponse.json({ 
-        message: `All ${allEvents.length} events removed from calendar and sheet cleared successfully!` 
+      return NextResponse.json({
+        message: `All ${allEvents.length} events removed from calendar and sheet cleared successfully!`
       });
     }
 
-    return NextResponse.json({ message: "Invalid action" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (error) {
     console.error(`Error processing POST request for ${name}:`, error);
-    if (error instanceof Error && "response" in error) {
-      const apiError = error as any;
-      return NextResponse.json(
-        { message: "Failed to process request", error: apiError.response?.data?.error?.message || error.message },
-        { status: apiError.response?.status || 400 }
-      );
-    }
     return NextResponse.json(
-      { message: "Error processing request", error: error instanceof Error ? error.message : String(error) },
+      {
+        error: "Failed to process request",
+        details: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 }
     );
   }
