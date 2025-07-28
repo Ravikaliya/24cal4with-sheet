@@ -23,6 +23,8 @@ interface Event {
   title: string;
   youtubeHindi: string;
   youtubeEnglish: string;
+  youtubePlaylistHindi: string;
+  youtubePlaylistEnglish: string;
   timeZone: string;
 }
 
@@ -33,14 +35,12 @@ const initialEventTitles: string[] = [
   "AWS", "Docker",
 ];
 
-// Clipboard fallback function
 const copyToClipboard = async (text: string) => {
   try {
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(text);
       toast.success("Copied to clipboard!");
     } else {
-      // Fallback for non-secure contexts or unsupported browsers
       const textArea = document.createElement("textarea");
       textArea.value = text;
       document.body.appendChild(textArea);
@@ -62,7 +62,6 @@ export default function EventsSheetYt() {
   const [events, setEvents] = useState<Event[]>([]);
   const [bulkInput, setBulkInput] = useState<string>("");
 
-  // Set default date to tomorrow (July 19, 2025)
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const [selectedDate, setSelectedDate] = useState<string>(tomorrow.toISOString().split("T")[0]);
@@ -100,22 +99,19 @@ export default function EventsSheetYt() {
           }
           const data = await res.json();
           const fetchedEvents = data.events || [];
+
           const adjustedEvents = Array.from({ length: 24 }).map((_, index) => {
             const startHour = String(index).padStart(2, "0");
-            const event = fetchedEvents[index] || {
-              title: initialEventTitles[index] || "Empty Slot",
-              youtubeHindi: "",
-              youtubeEnglish: "",
-              timeZone: "Asia/Kolkata",
-            };
+            const event = fetchedEvents[index] || {};
             const title = event.title || initialEventTitles[index] || "Empty Slot";
             return {
-              ...event,
               start: `${selectedDate}T${startHour}:00:00`,
               end: `${selectedDate}T${startHour}:50:00`,
-              title,
-              youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
-              youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
+              title: title,
+              youtubeHindi: event.youtubeHindi || `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
+              youtubeEnglish: event.youtubeEnglish || `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
+              youtubePlaylistHindi: event.youtubePlaylistHindi || `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
+              youtubePlaylistEnglish: event.youtubePlaylistEnglish || `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in English")}&sp=EgIQAw%3D%3D`,
               timeZone: event.timeZone || "Asia/Kolkata",
             };
           });
@@ -141,6 +137,8 @@ export default function EventsSheetYt() {
         title,
         youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
         youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
+        youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
+        youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in English")}&sp=EgIQAw%3D%3D`,
         timeZone: "Asia/Kolkata",
       };
     });
@@ -194,10 +192,13 @@ export default function EventsSheetYt() {
     setSelectedEvents([]);
     await handleEventAction(
       "/api/events-sheet-yt",
-      { action: "removeAll" },
+      // CHANGE: Pass selectedDate to the backend for conditional deletion
+      { action: "removeAll", selectedDate: selectedDate },
       "All events removed from calendar and sheet cleared successfully!",
       "Failed to remove events or clear sheet!"
     );
+    // After removal, re-fetch or re-initialize events to reflect empty state
+    updateEvents(selectedDate); // Re-populate with default "Empty Slot" events
   };
 
   const handleTitleChange = (index: number, newTitle: string) => {
@@ -207,6 +208,8 @@ export default function EventsSheetYt() {
       title: newTitle,
       youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(newTitle + " in Hindi")}`,
       youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(newTitle + " in English")}`,
+      youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(newTitle + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
+      youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(newTitle + " playlist in English")}&sp=EgIQAw%3D%3D`,
     };
     setEvents(updatedEvents);
   };
@@ -243,6 +246,8 @@ export default function EventsSheetYt() {
         title,
         youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
         youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
+        youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
+        youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in English")}&sp=EgIQAw%3D%3D`,
         timeZone: "Asia/Kolkata",
       };
     });
@@ -258,9 +263,7 @@ export default function EventsSheetYt() {
     toast.success("Input cleared and events reset");
   };
 
-  // Handle clicking on YouTube links to copy them
-  const handleLinkClick = (url: string, e: React.MouseEvent) => {
-    e.preventDefault();
+  const handleLinkClick = (url: string) => {
     copyToClipboard(url);
   };
 
@@ -294,6 +297,8 @@ export default function EventsSheetYt() {
             title: initialEventTitles[index] || "Empty Slot",
             youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent((initialEventTitles[index] || "Empty Slot") + " in Hindi")}`,
             youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent((initialEventTitles[index] || "Empty Slot") + " in English")}`,
+            youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent((initialEventTitles[index] || "Empty Slot") + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
+            youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent((initialEventTitles[index] || "Empty Slot") + " playlist in English")}&sp=EgIQAw%3D%3D`,
             timeZone: "Asia/Kolkata",
           };
           const isSelected = selectedEvents.some((e) => e.title === event.title && event.title !== "Empty Slot");
@@ -317,17 +322,39 @@ export default function EventsSheetYt() {
                 <div className="flex gap-2">
                   <a
                     href={event.youtubeHindi}
-                    onClick={(e) => handleLinkClick(event.youtubeHindi, e)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => handleLinkClick(event.youtubeHindi)}
                     className="text-blue-500 text-sm"
                   >
                     <Badge variant="outline">H</Badge>
                   </a>
                   <a
                     href={event.youtubeEnglish}
-                    onClick={(e) => handleLinkClick(event.youtubeEnglish, e)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => handleLinkClick(event.youtubeEnglish)}
                     className="text-blue-500 text-sm"
                   >
                     <Badge variant="outline">E</Badge>
+                  </a>
+                  <a
+                    href={event.youtubePlaylistHindi}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => handleLinkClick(event.youtubePlaylistHindi)}
+                    className="text-blue-500 text-sm"
+                  >
+                    <Badge variant="outline">PH</Badge>
+                  </a>
+                  <a
+                    href={event.youtubePlaylistEnglish}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => handleLinkClick(event.youtubePlaylistEnglish)}
+                    className="text-blue-500 text-sm"
+                  >
+                    <Badge variant="outline">PE</Badge>
                   </a>
                 </div>
               </CardContent>
