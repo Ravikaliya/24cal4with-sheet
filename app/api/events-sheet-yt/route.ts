@@ -63,7 +63,7 @@ const ensureSheetsExistAndHaveHeaders = async (sheets: ReturnType<typeof google.
   try {
     const response = await sheets.spreadsheets.get({
       spreadsheetId,
-      fields: 'sheets.properties.title' // Request only sheet titles to minimize data transfer
+      fields: 'sheets.properties.title'
     });
     const existingSheets = response.data.sheets?.map((sheet) => sheet.properties?.title) || [];
 
@@ -84,7 +84,7 @@ const ensureSheetsExistAndHaveHeaders = async (sheets: ReturnType<typeof google.
             ],
           },
         });
-        // New sheet, so headers must be added
+
         await sheets.spreadsheets.values.update({
           spreadsheetId,
           range: `${sheetName}!A1:F1`,
@@ -97,11 +97,10 @@ const ensureSheetsExistAndHaveHeaders = async (sheets: ReturnType<typeof google.
         // Sheet exists, check if headers are present
         const headerCheckResponse = await sheets.spreadsheets.values.get({
           spreadsheetId,
-          range: `${sheetName}!A1:F1`, // Check only the header row
+          range: `${sheetName}!A1:F1`,
         });
 
         const currentHeaders = headerCheckResponse.data.values?.[0] || [];
-        // Simple check: if the first header is missing or doesn't match
         if (currentHeaders.length === 0 || currentHeaders[0] !== SHEETS_HEADERS[0]) {
           console.log(`Sheet '${sheetName}' exists but headers are missing or incorrect, re-adding them.`);
           await sheets.spreadsheets.values.update({
@@ -121,7 +120,6 @@ const ensureSheetsExistAndHaveHeaders = async (sheets: ReturnType<typeof google.
   }
 };
 
-
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const action = searchParams.get("action");
@@ -138,7 +136,6 @@ export async function GET(request: Request) {
   }
 
   try {
-    // CHANGE: Use the updated function to also ensure headers
     await ensureSheetsExistAndHaveHeaders(sheets, spreadsheetId);
   } catch (error) {
     return NextResponse.json(
@@ -172,9 +169,7 @@ export async function GET(request: Request) {
       tomorrow.setDate(tomorrow.getDate() + 1);
       const tomorrowISO = tomorrow.toISOString().split("T")[0];
 
-      // CHANGE: Skip the header row if present, otherwise proceed normally
       const dataRows = rows[0] && rows[0][0] === SHEETS_HEADERS[0] ? rows.slice(1) : rows;
-
 
       const events: Event[] = dataRows.map((row, index) => {
         const [
@@ -232,8 +227,17 @@ export async function POST(request: Request) {
     );
   }
 
-  // CHANGE: Added selectedDate to the body type
-  let body: { action: string; events?: Event[]; selectedDate?: string };
+  // ADD notificationDuration to the body definition
+  let body: {
+    action: string;
+    events?: Event[];
+    selectedDate?: string;
+    dates?: string[];
+    isRangeMode?: boolean;
+    eventDuration?: number;
+    notificationDuration?: number;
+  };
+
   try {
     body = await request.json();
   } catch (error) {
@@ -243,9 +247,18 @@ export async function POST(request: Request) {
     );
   }
 
-  const { action, events, selectedDate } = body; // Destructure selectedDate
+  const {
+    action, events, selectedDate, dates, isRangeMode,
+    eventDuration, notificationDuration,
+  } = body;
+
   if (!action) {
     return NextResponse.json({ error: "Missing action in request body" }, { status: 400 });
+  }
+
+  const datesToProcess = dates && dates.length > 0 ? dates : (selectedDate ? [selectedDate] : []);
+  if (datesToProcess.length === 0) {
+    return NextResponse.json({ error: "No valid dates provided" }, { status: 400 });
   }
 
   const auth = await authenticate();
@@ -263,7 +276,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Ensure sheet headers are present before any operations
     await ensureSheetsExistAndHaveHeaders(sheets, spreadsheetId);
 
     if (action === "addAll") {
@@ -274,34 +286,74 @@ export async function POST(request: Request) {
         );
       }
 
-      console.log(`Adding events to calendar: ${calendarId}`);
-      for (const evt of events) {
-        const startDateTime = new Date(evt.start);
-        let endDateTime = new Date(evt.end);
-        if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
-          throw new Error("Invalid start or end date in one or more events.");
-        }
-        if (endDateTime.getTime() <= startDateTime.getTime()) {
-          endDateTime = new Date(startDateTime.getTime() + 50 * 60 * 1000);
-        }
-        const startISO = startDateTime.toISOString();
-        const endISO = endDateTime.toISOString();
+      console.log(`Adding events to calendar: ${calendarId} for ${datesToProcess.length} date(s): ${datesToProcess.join(", ")}`);
 
-        await calendar.events.insert({
-          calendarId,
-          requestBody: {
-            summary: evt.title,
-            description: `Hindi: ${evt.youtubeHindi || ""}\nEnglish: ${evt.youtubeEnglish || ""}\nPlaylist (Hindi): ${evt.youtubePlaylistHindi || ""}\nPlaylist (English): ${evt.youtubePlaylistEnglish || ""}`,
-            start: { dateTime: startISO, timeZone: evt.timeZone },
-            end: { dateTime: endISO, timeZone: evt.timeZone },
-          },
-        });
+      let totalEventsAdded = 0;
+
+      for (const dateStr of datesToProcess) {
+        console.log(`Processing events for date: ${dateStr}`);
+
+        for (const [index, evt] of events.entries()) {
+          const eventForDate = {
+            ...evt,
+            start: evt.start.replace(/^\d{4}-\d{2}-\d{2}/, dateStr),
+            end: evt.end.replace(/^\d{4}-\d{2}-\d{2}/, dateStr)
+          };
+
+          // Calculate event start and end based on eventDuration
+          const startDateTime = new Date(eventForDate.start);
+          const durationMinutes = typeof eventDuration === "number" ? eventDuration : 50;
+          const endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60 * 1000);
+
+          if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+            console.error(`Invalid date for event: ${eventForDate.title} on ${dateStr}`);
+            continue;
+          }
+
+          const startISO = startDateTime.toISOString();
+          const endISO = endDateTime.toISOString();
+
+          console.log(
+            `Creating event '${eventForDate.title}' [${startISO} ... ${endISO}] with reminder ${notificationDuration}min before`
+          );
+
+          try {
+            await calendar.events.insert({
+              calendarId,
+              requestBody: {
+                summary: eventForDate.title,
+                description: `Hindi: ${eventForDate.youtubeHindi || ""}\nEnglish: ${eventForDate.youtubeEnglish || ""}\nPlaylist (Hindi): ${eventForDate.youtubePlaylistHindi || ""}\nPlaylist (English): ${eventForDate.youtubePlaylistEnglish || ""}`,
+                start: { dateTime: startISO, timeZone: eventForDate.timeZone },
+                end: { dateTime: endISO, timeZone: eventForDate.timeZone },
+                // assign notificationDuration as custom notification
+                reminders: {
+                  useDefault: false,
+                  overrides: [
+                    {
+                      method: "popup",
+                      minutes: typeof notificationDuration === "number" ? notificationDuration : 5,
+                    },
+                  ],
+                },
+              },
+            });
+            totalEventsAdded++;
+            console.log(`Added event: ${eventForDate.title} on ${dateStr}`);
+          } catch (insertError) {
+            console.error(`Failed to insert event: ${eventForDate.title} on ${dateStr}:`, insertError);
+          }
+        }
       }
 
-      const sheetRange = `${name}!A2:F${events.length + 1}`; // Target cells below headers
+      const referenceDate = datesToProcess[0];
+      const sheetRange = `${name}!A2:F${events.length + 1}`;
       const sheetValues = events.map((evt, index) => {
         const startHour = String(index).padStart(2, "0");
-        const timeRange = `${startHour}:00 - ${startHour}:50`;
+        const startTime = new Date(`${referenceDate}T${startHour}:00:00`);
+        const endTime = new Date(startTime.getTime() + ((eventDuration || 50) * 60 * 1000));
+        const endHour = String(endTime.getHours()).padStart(2, "0");
+        const endMinute = String(endTime.getMinutes()).padStart(2, "0");
+        const timeRange = `${startHour}:00 - ${endHour}:${endMinute}`;
         return [
           timeRange,
           evt.title,
@@ -312,83 +364,132 @@ export async function POST(request: Request) {
         ];
       });
 
-      console.log(`Updating sheet ${name} with range ${sheetRange}:`, sheetValues);
+      console.log(`Updating sheet ${name} with range ${sheetRange}`);
 
-      await sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range: sheetRange,
-        valueInputOption: "RAW",
-        requestBody: {
-          values: sheetValues,
-        },
-      });
-
-      return NextResponse.json({ message: "All events added to calendar and sheet updated successfully!" });
-    }
-
-    if (action === "removeAll") {
-      if (!selectedDate) {
-        return NextResponse.json({ error: "selectedDate is required for removeAll action." }, { status: 400 });
+      try {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: sheetRange,
+          valueInputOption: "RAW",
+          requestBody: {
+            values: sheetValues,
+          },
+        });
+        console.log(`Sheet ${name} updated successfully`);
+      } catch (sheetError) {
+        console.error(`Failed to update sheet ${name}:`, sheetError);
       }
 
-      console.log(`Attempting to remove events from calendar: ${calendarId} for date: ${selectedDate}`);
+      const message = isRangeMode
+        ? `${totalEventsAdded} events added to calendar across ${datesToProcess.length} days (${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]}) and sheet updated successfully!`
+        : `${totalEventsAdded} events added to calendar for ${referenceDate} and sheet updated successfully!`;
 
-      const startOfDay = new Date(`${selectedDate}T00:00:00Z`); // Start of selected day in UTC
-      const endOfDay = new Date(`${selectedDate}T23:59:59Z`);   // End of selected day in UTC
+      return NextResponse.json({ message });
+    }
 
-      let pageToken: string | undefined = undefined;
-      const eventsToDelete: calendar_v3.Schema$Event[] = [];
+    // ... keep your removeAll action with your logs and comments ...
+    if (action === "removeAll") {
+      console.log(`Attempting to remove events from calendar: ${calendarId} for ${datesToProcess.length} date(s): ${datesToProcess.join(", ")}`);
 
-      // Loop to fetch events for the selected date page by page
-      do {
-        const response: calendar_v3.Schema$Events = await calendar.events.list({
-          calendarId,
-          pageToken,
-          timeMin: startOfDay.toISOString(), // Filter events starting from the beginning of the selected day
-          timeMax: endOfDay.toISOString(),   // Filter events ending by the end of the selected day
-          singleEvents: true, // Expand recurring events into individual instances
-          orderBy: 'startTime',
-        }).then(res => res.data);
+      let totalDeletedEvents = 0;
+      const deletionResults: { [date: string]: number } = {};
 
-        const fetchedEvents = response.items || [];
-        eventsToDelete.push(...fetchedEvents);
-        pageToken = response.nextPageToken ?? undefined;
-      } while (pageToken);
+      for (const dateStr of datesToProcess) {
+        console.log(`Processing deletion for date: ${dateStr}`);
 
-      console.log(`Found ${eventsToDelete.length} events to delete from calendar for ${selectedDate}`);
+        // FIXED: Get a wider time range and filter more precisely
+        const searchStart = new Date(dateStr);
+        searchStart.setDate(searchStart.getDate() - 1); // Start from previous day
+        const searchEnd = new Date(dateStr);
+        searchEnd.setDate(searchEnd.getDate() + 2); // End at next day
 
-      // Delete each event found for the specific date
-      for (const evt of eventsToDelete) {
-        if (evt.id) {
+        let pageToken: string | undefined = undefined;
+        const eventsToDelete: calendar_v3.Schema$Event[] = [];
+
+        do {
           try {
-            await calendar.events.delete({
+            const response: calendar_v3.Schema$Events = await calendar.events.list({
               calendarId,
-              eventId: evt.id,
+              pageToken,
+              timeMin: searchStart.toISOString(),
+              timeMax: searchEnd.toISOString(),
+              singleEvents: true,
+              orderBy: 'startTime',
+            }).then(res => res.data);
+
+            const fetchedEvents = response.items || [];
+
+            // FIXED: Filter events that match our target date precisely
+            const filteredEvents = fetchedEvents.filter(event => {
+              if (!event.start?.dateTime) return false;
+              const eventStart = new Date(event.start.dateTime);
+              const eventYear = eventStart.getFullYear();
+              const eventMonth = String(eventStart.getMonth() + 1).padStart(2, '0');
+              const eventDay = String(eventStart.getDate()).padStart(2, '0');
+              const eventDateStr = `${eventYear}-${eventMonth}-${eventDay}`;
+
+              console.log(`Event: ${event.summary}, Event Date: ${eventDateStr}, Target Date: ${dateStr}`);
+
+              return eventDateStr === dateStr;
             });
-            console.log(`Deleted event: ${evt.summary} (ID: ${evt.id}) for date ${selectedDate}`);
-          } catch (deleteError: any) { // Use any for error type if not sure, or more specific Google API error types
-            // A common error for deletion is 404 if event is already deleted, or 403 for permissions
-            if (deleteError.code === 404) {
-              console.warn(`Event ${evt.id} not found, likely already deleted.`);
-            } else {
-              console.error(`Failed to delete event ${evt.id}:`, deleteError.message, deleteError.errors);
-            }
+
+            eventsToDelete.push(...filteredEvents);
+            pageToken = response.nextPageToken ?? undefined;
+          } catch (listError) {
+            console.error(`Failed to list events for ${dateStr}:`, listError);
+            break;
           }
-        } else {
-          console.warn(`Event without ID found, cannot delete: ${JSON.stringify(evt)}`);
+        } while (pageToken);
+
+        console.log(`Found ${eventsToDelete.length} events to delete for ${dateStr}`);
+        deletionResults[dateStr] = 0;
+
+        // Delete each filtered event
+        for (const evt of eventsToDelete) {
+          if (evt.id) {
+            try {
+              await calendar.events.delete({
+                calendarId,
+                eventId: evt.id,
+              });
+              deletionResults[dateStr]++;
+              totalDeletedEvents++;
+              console.log(`Deleted event: ${evt.summary} (ID: ${evt.id}) for ${dateStr} at ${evt.start?.dateTime}`);
+            } catch (deleteError: any) {
+              if (deleteError.code === 404) {
+                console.warn(`Event ${evt.id} not found for ${dateStr}, likely already deleted.`);
+              } else if (deleteError.code === 403) {
+                console.error(`Permission denied to delete event ${evt.id} for ${dateStr}`);
+              } else {
+                console.error(`Failed to delete event ${evt.id} for ${dateStr}:`, deleteError.message);
+              }
+            }
+          } else {
+            console.warn(`Event without ID found for ${dateStr}, cannot delete: ${evt.summary || 'Unknown event'}`);
+          }
         }
       }
 
       console.log(`Clearing sheet ${name} data below headers`);
-      // CHANGE: Ensure this clears only data below the header row (A2:F)
-      await sheets.spreadsheets.values.clear({
-        spreadsheetId,
-        range: `${name}!A2:F`,
-      });
+      try {
+        await sheets.spreadsheets.values.clear({
+          spreadsheetId,
+          range: `${name}!A2:F`,
+        });
+        console.log(`Sheet ${name} cleared successfully`);
+      } catch (clearError) {
+        console.error(`Failed to clear sheet ${name}:`, clearError);
+      }
 
-      return NextResponse.json({
-        message: `All ${eventsToDelete.length} events removed from calendar for ${selectedDate} and sheet cleared successfully!`
-      });
+      const deletionSummary = Object.entries(deletionResults)
+        .map(([date, count]) => `${date}: ${count} events`)
+        .join(", ");
+
+      const message = isRangeMode
+        ? `${totalDeletedEvents} events removed from calendar across ${datesToProcess.length} days (${deletionSummary}) and sheet cleared successfully!`
+        : `${totalDeletedEvents} events removed from calendar for ${datesToProcess[0]} and sheet cleared successfully!`;
+
+      return NextResponse.json({ message });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
