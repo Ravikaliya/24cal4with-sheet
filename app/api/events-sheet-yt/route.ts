@@ -227,7 +227,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // ADD notificationDuration to the body definition
   let body: {
     action: string;
     events?: Event[];
@@ -235,7 +234,6 @@ export async function POST(request: Request) {
     dates?: string[];
     isRangeMode?: boolean;
     eventDuration?: number;
-    notificationDuration?: number;
   };
 
   try {
@@ -249,7 +247,7 @@ export async function POST(request: Request) {
 
   const {
     action, events, selectedDate, dates, isRangeMode,
-    eventDuration, notificationDuration,
+    eventDuration,
   } = body;
 
   if (!action) {
@@ -314,7 +312,7 @@ export async function POST(request: Request) {
           const endISO = endDateTime.toISOString();
 
           console.log(
-            `Creating event '${eventForDate.title}' [${startISO} ... ${endISO}] with reminder ${notificationDuration}min before`
+            `Creating event '${eventForDate.title}' [${startISO} ... ${endISO}]`
           );
 
           try {
@@ -325,16 +323,6 @@ export async function POST(request: Request) {
                 description: `Hindi: ${eventForDate.youtubeHindi || ""}\nEnglish: ${eventForDate.youtubeEnglish || ""}\nPlaylist (Hindi): ${eventForDate.youtubePlaylistHindi || ""}\nPlaylist (English): ${eventForDate.youtubePlaylistEnglish || ""}`,
                 start: { dateTime: startISO, timeZone: eventForDate.timeZone },
                 end: { dateTime: endISO, timeZone: eventForDate.timeZone },
-                // assign notificationDuration as custom notification
-                reminders: {
-                  useDefault: false,
-                  overrides: [
-                    {
-                      method: "popup",
-                      minutes: typeof notificationDuration === "number" ? notificationDuration : 5,
-                    },
-                  ],
-                },
               },
             });
             totalEventsAdded++;

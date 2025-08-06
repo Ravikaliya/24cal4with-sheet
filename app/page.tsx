@@ -128,10 +128,8 @@ export default function EventsSheetYt() {
   const [events, setEvents] = useState<Event[]>([]);
   const [bulkInput, setBulkInput] = useState<string>("");
 
-  const eventDurations = [9, 10, 20, 30, 40];
-  const notificationDurations = [1, 5];
+  const eventDurations = [5, 9, 10, 20, 30, 40];
   const [selectedEventDuration, setSelectedEventDuration] = useState<number>(eventDurations[0]);
-  const [selectedNotificationDuration, setSelectedNotificationDuration] = useState<number>(1); // For default: 9min → 1min
 
   const calendarAccounts = ["Home", "Office", "Kaliya"];
   const [selectedCalendarAccount, setSelectedCalendarAccount] = useState<string>(calendarAccounts[0]);
@@ -142,16 +140,6 @@ export default function EventsSheetYt() {
   const [selectedDate, setSelectedDate] = useState<string>(tomorrow.toISOString().split("T")[0]);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [isRangeMode, setIsRangeMode] = useState<boolean>(false);
-
-  // If eventDuration = 9, force notificationDuration = 1, and disable others in dropdown
-  useEffect(() => {
-    if (selectedEventDuration === 9) {
-      setSelectedNotificationDuration(1);
-    }
-    else {
-      setSelectedNotificationDuration(5);
-    }
-  }, [selectedEventDuration]);
 
   useEffect(() => {
     const fetchSheetNames = async () => {
@@ -287,7 +275,6 @@ export default function EventsSheetYt() {
         dates: datesToProcess,
         isRangeMode: isRangeMode,
         eventDuration: selectedEventDuration,
-        notificationDuration: selectedNotificationDuration, // <-- NEW!
       },
       `Events added to calendar for ${datesToProcess.length} day(s) and sheet updated successfully!`,
       "Failed to add events or update sheet!"
@@ -436,23 +423,6 @@ export default function EventsSheetYt() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          {/* Notification duration dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">{selectedNotificationDuration} min notice</Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              {notificationDurations.map(nduration => (
-                <DropdownMenuItem
-                  key={nduration}
-                  disabled={selectedEventDuration === 9 && nduration !== 1}
-                  onClick={() => setSelectedNotificationDuration(nduration)}
-                >
-                  {nduration} min
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
           {/* Toggle between single date and date range */}
           <Button
             variant={isRangeMode ? "default" : "outline"}
@@ -518,7 +488,7 @@ export default function EventsSheetYt() {
               <CardHeader className="p-0">
                 <div className="flex sm:flex-col lg:flex-row justify-between">
                   <Badge><Clock10 className="w-4 h-4 mr-1" />{timeRange}</Badge>
-                  <Badge variant="outline"><BellDot className="w-4 h-4 mr-1" />{selectedNotificationDuration} min</Badge>
+                  <Badge variant="outline"><BellDot className="w-4 h-4 mr-1" />5 min</Badge>
                 </div>
               </CardHeader>
               <CardContent className="p-0 space-y-2">
