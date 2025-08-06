@@ -42,3 +42,5 @@ next-env.d.ts
 
 .env*.local
 lib/service-account-key.json
+lib/service-account-home.json
+lib/service-account-office.json

@@ -50,15 +50,13 @@ function DateRangeForm({ value, onChange }: DateRangeFormProps) {
           )}
         >
           <CalendarIcon className="mr-2 h-4 w-4" />
-          {value?.from ? (
-            value.to ? (
-              <>
-                {format(value.from, "LLL dd, y")} - {format(value.to, "LLL dd, y")}
-              </>
-            ) : (
-              format(value.from, "LLL dd, y")
-            )
+          {value?.from ? (value.to ? (
+            <>
+              {format(value.from, "LLL dd, y")} - {format(value.to, "LLL dd, y")}
+            </>
           ) : (
+            format(value.from, "LLL dd, y")
+          )) : (
             <span>Pick a date range</span>
           )}
         </Button>
@@ -84,6 +82,15 @@ const initialEventTitles: string[] = [
   "AWS", "Docker",
 ];
 
+// Maps calendar accounts to sheet names
+const calendarAccountSheetsMap: Record<string, string[]> = {
+  Home: ["Achal", "Neeraj", "Salman", "Vivek", "Jyoti", "Govt", "Ravi"],
+  Office: ["Office"],
+};
+
+const eventDurations = [5, 9, 10, 20, 30, 40];
+
+// Copied utility functions
 const copyToClipboard = async (text: string) => {
   try {
     if (navigator.clipboard && window.isSecureContext) {
@@ -104,7 +111,6 @@ const copyToClipboard = async (text: string) => {
   }
 };
 
-// Helper function to get dates between two dates - FIXED VERSION
 const getDatesBetween = (startDate: Date, endDate: Date): string[] => {
   const dates: string[] = [];
   const current = new Date(startDate);
@@ -122,54 +128,50 @@ const getDatesBetween = (startDate: Date, endDate: Date): string[] => {
 };
 
 export default function EventsSheetYt() {
+  const calendarAccounts = Object.keys(calendarAccountSheetsMap);
+
   const [selectedEvents, setSelectedEvents] = useState<Event[]>([]);
-  const [sheetNames, setSheetNames] = useState<string[]>([]);
-  const [selectedName, setSelectedName] = useState<string>("Select a sheet");
+  const [selectedCalendarAccount, setSelectedCalendarAccount] = useState<string>(calendarAccounts[0]);
+  const [sheetNames, setSheetNames] = useState<string[]>(calendarAccountSheetsMap[calendarAccounts[0]]);
+  const [selectedName, setSelectedName] = useState<string>(selectedCalendarAccount === "Home" ? "Ravi" : "Office");
   const [events, setEvents] = useState<Event[]>([]);
   const [bulkInput, setBulkInput] = useState<string>("");
 
-  const eventDurations = [5, 9, 10, 20, 30, 40];
   const [selectedEventDuration, setSelectedEventDuration] = useState<number>(eventDurations[0]);
 
-  const calendarAccounts = ["Home", "Office", "Kaliya"];
-  const [selectedCalendarAccount, setSelectedCalendarAccount] = useState<string>(calendarAccounts[0]);
-
-  // Date management states
+  // Date management
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const [selectedDate, setSelectedDate] = useState<string>(tomorrow.toISOString().split("T")[0]);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const [isRangeMode, setIsRangeMode] = useState<boolean>(false);
+  const [isRangeMode, setIsRangeMode] = useState<boolean>(true);
 
+  // Update sheets and selected name on calendar account change
   useEffect(() => {
-    const fetchSheetNames = async () => {
-      try {
-        const res = await fetch("/api/events-sheet-yt?action=getSheetNames");
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}));
-          throw new Error(errorData.error || "Failed to fetch sheet names");
-        }
-        const data = await res.json();
-        setSheetNames(data.sheetNames || []);
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Error fetching sheet names");
-        console.error(error);
-      }
-    };
-    fetchSheetNames();
-    updateEvents(selectedDate);
-  }, [selectedDate]);
+    const sheets = calendarAccountSheetsMap[selectedCalendarAccount] || [];
+    setSheetNames(sheets);
 
+    if (selectedCalendarAccount === "Home" && sheets.includes("Ravi")) {
+      setSelectedName("Ravi");
+    } else if (selectedCalendarAccount === "Office" && sheets.includes("Office")) {
+      setSelectedName("Office");
+    } else {
+      setSelectedName("Select a sheet");
+    }
+
+  }, [selectedCalendarAccount]);
+
+  // Fetch events when selected sheet or date or event duration changes
   useEffect(() => {
     if (selectedName !== "Select a sheet") {
-      const fetchEvents = async () => {
+      (async () => {
         try {
           const res = await fetch(
             `/api/events-sheet-yt?action=getEvents&sheetName=${encodeURIComponent(selectedName)}&date=${selectedDate}`
           );
           if (!res.ok) {
-            const errorData = await res.json().catch(() => ({}));
-            throw new Error(errorData.error || "Failed to fetch events");
+            const eData = await res.json().catch(() => ({}));
+            throw new Error(eData.error || "Failed to fetch events");
           }
           const data = await res.json();
           const fetchedEvents = data.events || [];
@@ -178,7 +180,6 @@ export default function EventsSheetYt() {
             const startHour = String(index).padStart(2, "0");
             const event = fetchedEvents[index] || {};
             const title = event.title || initialEventTitles[index] || "Empty Slot";
-            // Update end time to reflect event duration
             const startTimeDate = new Date(`${selectedDate}T${startHour}:00:00`);
             const endTimeDate = new Date(startTimeDate.getTime() + selectedEventDuration * 60 * 1000);
             const endHour = String(endTimeDate.getHours()).padStart(2, "0");
@@ -199,13 +200,12 @@ export default function EventsSheetYt() {
           toast.error(error instanceof Error ? error.message : "Error fetching events");
           console.error(error);
         }
-      };
-      fetchEvents();
+      })();
     } else {
       updateEvents(selectedDate);
     }
-    // eslint-disable-next-line
-  }, [selectedName, selectedDate, selectedEventDuration]); // rerun on duration change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedName, selectedDate, selectedEventDuration]);
 
   const updateEvents = (date: string) => {
     const updatedEvents = Array.from({ length: 24 }).map((_, index) => {
@@ -236,7 +236,8 @@ export default function EventsSheetYt() {
     errorMessage: string
   ) => {
     try {
-      const url = `${endpoint}?name=${encodeURIComponent(selectedName)}`;
+      // Pass calendar account and sheet name as query params
+      const url = `${endpoint}?name=${encodeURIComponent(selectedName)}&calendarAccount=${encodeURIComponent(selectedCalendarAccount)}`;
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -258,9 +259,10 @@ export default function EventsSheetYt() {
     }
     const eventsToAdd = events.filter((e) => e.title !== "Empty Slot");
     setSelectedEvents(eventsToAdd);
-    const datesToProcess = isRangeMode && dateRange?.from && dateRange?.to
-      ? getDatesBetween(dateRange.from, dateRange.to)
-      : [selectedDate];
+    const datesToProcess =
+      isRangeMode && dateRange?.from && dateRange?.to
+        ? getDatesBetween(dateRange.from, dateRange.to)
+        : [selectedDate];
     if (isRangeMode && datesToProcess.length > 1) {
       const confirmed = window.confirm(
         `Are you sure you want to add events to ${datesToProcess.length} days (${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]})?`
@@ -286,9 +288,10 @@ export default function EventsSheetYt() {
       toast.error("Please select a sheet first!");
       return;
     }
-    const datesToProcess = isRangeMode && dateRange?.from && dateRange?.to
-      ? getDatesBetween(dateRange.from, dateRange.to)
-      : [selectedDate];
+    const datesToProcess =
+      isRangeMode && dateRange?.from && dateRange?.to
+        ? getDatesBetween(dateRange.from, dateRange.to)
+        : [selectedDate];
     if (isRangeMode && datesToProcess.length > 1) {
       const confirmed = window.confirm(
         `Are you sure you want to remove events from ${datesToProcess.length} days (${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]})?`
@@ -301,7 +304,7 @@ export default function EventsSheetYt() {
       {
         action: "removeAll",
         dates: datesToProcess,
-        isRangeMode: isRangeMode
+        isRangeMode: isRangeMode,
       },
       `Events removed from calendar for ${datesToProcess.length} day(s) and sheet cleared successfully!`,
       "Failed to remove events or clear sheet!"
@@ -374,7 +377,6 @@ export default function EventsSheetYt() {
     copyToClipboard(url);
   };
 
-  // Updated handler for date range changes
   const handleDateRangeChange = (range: DateRange | undefined) => {
     setDateRange(range);
     if (range?.from) {
@@ -389,14 +391,12 @@ export default function EventsSheetYt() {
     }
   };
 
-  // Handler for single date changes
   const handleSingleDateChange = (date: string) => {
     setSelectedDate(date);
     updateEvents(date);
     if (isRangeMode) setDateRange(undefined);
   };
 
-  // Toggle between range and single mode
   const toggleDateMode = () => {
     setIsRangeMode(!isRangeMode);
     setDateRange(undefined);
@@ -404,9 +404,10 @@ export default function EventsSheetYt() {
 
   return (
     <div className="p-4 h-dvh">
-      {/* Top controls section */}
+      {/* Controls */}
       <div className="mb-4">
         <div className="flex flex-wrap lg:flex-nowrap gap-2 items-center">
+
           {/* Event duration dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -423,15 +424,46 @@ export default function EventsSheetYt() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          {/* Toggle between single date and date range */}
-          <Button
+
+          {/* Calendar Account dropdown */}
+          {/* <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">{selectedCalendarAccount}</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              {calendarAccounts.map(acc => (
+                <DropdownMenuItem key={acc} onClick={() => setSelectedCalendarAccount(acc)}>
+                  {acc}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu> */}
+
+          {/* Select Sheet dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">{selectedName}</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="md:w-56">
+              <DropdownMenuLabel>Select Sheet</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {sheetNames.map((name) => (
+                <DropdownMenuItem key={name} onClick={() => setSelectedName(name)}>
+                  {name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Toggle Single/Range */}
+          {/* <Button
             variant={isRangeMode ? "default" : "outline"}
             onClick={toggleDateMode}
             className="min-w-[80px]"
           >
             {isRangeMode ? "Range" : "Single"}
-          </Button>
-          {/* Date picker/date range picker */}
+          </Button> */}
+
           {isRangeMode ? (
             <DateRangeForm
               value={dateRange}
@@ -443,6 +475,7 @@ export default function EventsSheetYt() {
               onChange={handleSingleDateChange}
             />
           )}
+
           <Input
             className="w-full"
             value={bulkInput}
@@ -452,21 +485,19 @@ export default function EventsSheetYt() {
           <Button onClick={handleBulkPaste}>Apply Paste</Button>
           <Button variant="destructive" onClick={clearBulkInput}>×</Button>
         </div>
-        <div className="mt-2 text-sm text-gray-600" style={{ fontWeight: "bold" }}>
-          {isRangeMode ? (
-            dateRange?.from && dateRange?.to ? (
-              <span>
-                Selected range: {format(dateRange.from, "MMM dd, yyyy")} - {format(dateRange.to, "MMM dd, yyyy")}
-                ({getDatesBetween(dateRange.from, dateRange.to).length} days)
-              </span>
-            ) : (
-              <span>Please select a date range</span>
-            )
-          ) : (
+
+        <div className="mt-2 text-sm text-gray-600 font-bold">
+          {isRangeMode ? (dateRange?.from && dateRange?.to ? (
+            <span>
+              Selected range: {format(dateRange.from, "MMM dd, yyyy")} - {format(dateRange.to, "MMM dd, yyyy")}
+              ({getDatesBetween(dateRange.from, dateRange.to).length} days)
+            </span>
+          ) : <span>Please select a date range</span>) : (
             <span>Selected date: {format(new Date(selectedDate), "MMM dd, yyyy")}</span>
           )}
         </div>
       </div>
+
       {/* Events grid */}
       <div className="grid md:grid-cols-6 gap-4">
         {Array.from({ length: 24 }).map((_, index) => {
@@ -483,6 +514,7 @@ export default function EventsSheetYt() {
           const isSelected = selectedEvents.some((e) => e.title === event.title && event.title !== "Empty Slot");
           const startHour = String(index).padStart(2, "0");
           const timeRange = `${startHour}:00 - ${event.end.split("T")[1].slice(0, 5)}`;
+
           return (
             <Card key={index} className={`p-2 gap-1 ${isSelected ? "border border-green-500 bg-green-100" : ""}`}>
               <CardHeader className="p-0">
@@ -498,83 +530,32 @@ export default function EventsSheetYt() {
                   placeholder="Enter event title"
                 />
                 <div className="flex gap-2 flex-wrap">
-                  <a
-                    href={event.youtubeHindi}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => handleLinkClick(event.youtubeHindi)}
-                    className="text-blue-500 text-sm"
-                  >
-                    <Badge variant="outline">H</Badge>
-                  </a>
-                  <a
-                    href={event.youtubeEnglish}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => handleLinkClick(event.youtubeEnglish)}
-                    className="text-blue-500 text-sm"
-                  >
-                    <Badge variant="outline">E</Badge>
-                  </a>
-                  <a
-                    href={event.youtubePlaylistHindi}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => handleLinkClick(event.youtubePlaylistHindi)}
-                    className="text-blue-500 text-sm"
-                  >
-                    <Badge variant="outline">PH</Badge>
-                  </a>
-                  <a
-                    href={event.youtubePlaylistEnglish}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => handleLinkClick(event.youtubePlaylistEnglish)}
-                    className="text-blue-500 text-sm"
-                  >
-                    <Badge variant="outline">PE</Badge>
-                  </a>
+                  {[
+                    { label: "H", url: event.youtubeHindi },
+                    { label: "E", url: event.youtubeEnglish },
+                    { label: "PH", url: event.youtubePlaylistHindi },
+                    { label: "PE", url: event.youtubePlaylistEnglish },
+                  ].map(({ label, url }) => (
+                    <a
+                      key={label}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => handleLinkClick(url)}
+                      className="text-blue-500 text-sm"
+                    >
+                      <Badge variant="outline">{label}</Badge>
+                    </a>
+                  ))}
                 </div>
               </CardContent>
             </Card>
           );
         })}
       </div>
-      {/* Bottom controls section */}
+
+      {/* Bottom controls */}
       <div className="flex gap-2 flex-col lg:flex-row justify-end mt-4 items-center">
-        <div className="lg:mr-auto flex gap-2">
-          {/* Calendar Account dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">{selectedCalendarAccount}</Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              {calendarAccounts.map(acc => (
-                <DropdownMenuItem
-                  key={acc}
-                  onClick={() => setSelectedCalendarAccount(acc)}
-                >
-                  {acc}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          {/* Select Sheet dropdown (existing) */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">{selectedName}</Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="md:w-56">
-              <DropdownMenuLabel>Select Sheet</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {sheetNames.map((name) => (
-                <DropdownMenuItem key={name} onClick={() => setSelectedName(name)}>
-                  {name}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
         <Button
           variant="default"
           onClick={addEvents}
