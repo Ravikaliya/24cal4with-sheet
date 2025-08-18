@@ -25,9 +25,6 @@ const CALENDAR_IDS: { [key: string]: string | undefined } = {
   // Office: process.env.Office_Calendar_ID,  // removed
 };
 
-// Valid sheet names for API usage
-const SHEET_NAMES = Object.keys(CALENDAR_IDS).filter((name) => CALENDAR_IDS[name]);
-
 interface Event {
   start: string;
   end: string;
@@ -39,7 +36,6 @@ interface Event {
   timeZone: string;
 }
 
-// Authenticate using google.auth.GoogleAuth with correct service account JSON based on calendar account
 const authenticate = async (calendarAccount: string) => {
   if (calendarAccount !== "Home") {
     calendarAccount = "Home"; // force to Home only
@@ -75,14 +71,12 @@ const authenticate = async (calendarAccount: string) => {
 };
 
 export async function GET(request: Request) {
-  // Simple readiness message or extend as needed
   return NextResponse.json({ message: "Google Calendar integration API is running." });
 }
 
 export async function POST(request: Request) {
   const { searchParams } = new URL(request.url);
   const name = searchParams.get("name") || "Vivek";
-  // Remove calendarAccount param usage; force Home
   const calendarAccount = "Home";
 
   const calendarId = CALENDAR_IDS[name];
@@ -102,7 +96,6 @@ export async function POST(request: Request) {
     selectedDate?: string;
     dates?: string[];
     isRangeMode?: boolean;
-    eventDuration?: number;
   };
 
   try {
@@ -114,7 +107,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { action, events, selectedDate, dates, isRangeMode, eventDuration } = body;
+  const { action, events, selectedDate, dates, isRangeMode } = body;
 
   if (!action) {
     return NextResponse.json({ error: "Missing action in request body" }, { status: 400 });
@@ -126,6 +119,7 @@ export async function POST(request: Request) {
   }
 
   const calendar = google.calendar({ version: "v3", auth });
+  const timeZone = "Asia/Kolkata";
 
   try {
     if (action === "addAll") {
@@ -141,48 +135,41 @@ export async function POST(request: Request) {
         console.log(`Processing events for date: ${dateStr}`);
 
         for (const evt of events) {
-          const eventForDate = {
-            ...evt,
-            start: evt.start.replace(/^\d{4}-\d{2}-\d{2}/, dateStr),
-            end: evt.end.replace(/^\d{4}-\d{2}-\d{2}/, dateStr),
-          };
+          // Extract hour from event start
+          const hour = evt.start.split("T")[1].slice(0, 2);
 
-          const startDateTime = new Date(eventForDate.start);
-          const durationMinutes = typeof eventDuration === "number" ? eventDuration : 50;
-          const endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60000);
+          // First event: 5 minutes from HH:00 to HH:05
+          const start1 = `${dateStr}T${hour}:00:00`;
+          const end1 = `${dateStr}T${hour}:05:00`;
 
-          if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
-            console.error(`Invalid date for event: ${eventForDate.title} on ${dateStr}`);
-            continue;
-          }
+          // Second event: 40 minutes from HH:10 to HH:50
+          const start2 = `${dateStr}T${hour}:10:00`;
+          const end2 = `${dateStr}T${hour}:50:00`;
 
-          const startISO = startDateTime.toISOString();
-          const endISO = endDateTime.toISOString();
-
-          console.log(`Creating event '${eventForDate.title}' [${startISO} ... ${endISO}]`);
-
-          try {
-            await calendar.events.insert({
-              calendarId,
-              requestBody: {
-                summary: eventForDate.title,
-                description:
-                  `Hindi: ${eventForDate.youtubeHindi || ""}\n` +
-                  `English: ${eventForDate.youtubeEnglish || ""}\n` +
-                  `Playlist (Hindi): ${eventForDate.youtubePlaylistHindi || ""}\n` +
-                  `Playlist (English): ${eventForDate.youtubePlaylistEnglish || ""}`,
-                start: { dateTime: startISO, timeZone: eventForDate.timeZone },
-                end: { dateTime: endISO, timeZone: eventForDate.timeZone },
-                reminders: {
-                  useDefault: false,
-                  overrides: [{ method: "popup", minutes: 5 }],
+          for (const [startTime, endTime] of [[start1, end1], [start2, end2]]) {
+            try {
+              await calendar.events.insert({
+                calendarId,
+                requestBody: {
+                  summary: evt.title,
+                  description:
+                    `Hindi: ${evt.youtubeHindi || ""}\n` +
+                    `English: ${evt.youtubeEnglish || ""}\n` +
+                    `Playlist (Hindi): ${evt.youtubePlaylistHindi || ""}\n` +
+                    `Playlist (English): ${evt.youtubePlaylistEnglish || ""}`,
+                  start: { dateTime: new Date(startTime).toISOString(), timeZone: evt.timeZone },
+                  end: { dateTime: new Date(endTime).toISOString(), timeZone: evt.timeZone },
+                  reminders: {
+                    useDefault: false,
+                    overrides: [{ method: "popup", minutes: 5 }],
+                  },
                 },
-              },
-            });
-            totalEventsAdded++;
-            console.log(`Added event: ${eventForDate.title} on ${dateStr}`);
-          } catch (insertError) {
-            console.error(`Failed to insert event: ${eventForDate.title} on ${dateStr}:`, insertError);
+              });
+              totalEventsAdded++;
+              console.log(`Added event '${evt.title}' on ${dateStr} from ${startTime} to ${endTime}`);
+            } catch (insertError) {
+              console.error(`Failed to insert event '${evt.title}' on ${dateStr} from ${startTime} to ${endTime}:`, insertError);
+            }
           }
         }
       }
@@ -202,10 +189,9 @@ export async function POST(request: Request) {
       for (const dateStr of datesToProcess) {
         console.log(`Processing deletion for date: ${dateStr}`);
 
-        const searchStart = new Date(dateStr);
-        searchStart.setDate(searchStart.getDate() - 1);
-        const searchEnd = new Date(dateStr);
-        searchEnd.setDate(searchEnd.getDate() + 2);
+        // Use Asia/Kolkata timezone explicit date range
+        const searchStart = `${dateStr}T00:00:00+05:30`;
+        const searchEnd = `${dateStr}T23:59:59+05:30`;
 
         let pageToken: string | undefined = undefined;
         const eventsToDelete: calendar_v3.Schema$Event[] = [];
@@ -215,19 +201,23 @@ export async function POST(request: Request) {
             const response: calendar_v3.Schema$Events = await calendar.events.list({
               calendarId,
               pageToken,
-              timeMin: searchStart.toISOString(),
-              timeMax: searchEnd.toISOString(),
+              timeMin: searchStart,
+              timeMax: searchEnd,
               singleEvents: true,
-              orderBy: 'startTime',
-            }).then(res => res.data);
+              orderBy: "startTime",
+            }).then((res) => res.data);
 
             const fetchedEvents = response.items || [];
-            const filteredEvents = fetchedEvents.filter(event => {
+
+            // Filter events exactly matching the date in timezone
+            const filteredEvents = fetchedEvents.filter((event) => {
               if (!event.start?.dateTime) return false;
               const eventStart = new Date(event.start.dateTime);
-              const eventDateStr = eventStart.toISOString().split("T")[0];
-              console.log(`Event: ${event.summary}, Event Date: ${eventDateStr}, Target Date: ${dateStr}`);
-              return eventDateStr === dateStr;
+              // Convert to Asia/Kolkata local date string
+              const localDateStr = eventStart.toLocaleDateString("en-CA", {
+                timeZone, // "en-CA" outputs yyyy-mm-dd format
+              });
+              return localDateStr === dateStr;
             });
 
             eventsToDelete.push(...filteredEvents);
@@ -259,7 +249,7 @@ export async function POST(request: Request) {
               }
             }
           } else {
-            console.warn(`Event without ID found for ${dateStr}, cannot delete: ${evt.summary || 'Unknown event'}`);
+            console.warn(`Event without ID found for ${dateStr}, cannot delete: ${evt.summary || "Unknown event"}`);
           }
         }
       }

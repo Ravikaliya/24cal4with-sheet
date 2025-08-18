@@ -82,33 +82,8 @@ const initialEventTitles: string[] = [
   "AWS", "Docker",
 ];
 
-// Maps calendar accounts to sheet names
 const calendarAccountSheetsMap: Record<string, string[]> = {
   Home: ["Achal", "Neeraj", "Salman", "Vivek", "Jyoti", "Govt", "Ravi"],
-  Office: ["Office"],
-};
-
-const eventDurations = [5, 9, 10, 20, 30, 40];
-
-// Copied utility functions
-const copyToClipboard = async (text: string) => {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      toast.success("Copied to clipboard!");
-    } else {
-      const textArea = document.createElement("textarea");
-      textArea.value = text;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textArea);
-      toast.success("Copied to clipboard using fallback!");
-    }
-  } catch (error) {
-    toast.error("Failed to copy to clipboard");
-    console.error("Clipboard error:", error);
-  }
 };
 
 const getDatesBetween = (startDate: Date, endDate: Date): string[] => {
@@ -129,39 +104,34 @@ const getDatesBetween = (startDate: Date, endDate: Date): string[] => {
 
 export default function EventsSheetYt() {
   const calendarAccounts = Object.keys(calendarAccountSheetsMap);
-
-  const [selectedEvents, setSelectedEvents] = useState<Event[]>([]);
   const [selectedCalendarAccount, setSelectedCalendarAccount] = useState<string>(calendarAccounts[0]);
-  const [sheetNames, setSheetNames] = useState<string[]>(calendarAccountSheetsMap[calendarAccounts[0]]);
-  const [selectedName, setSelectedName] = useState<string>(selectedCalendarAccount === "Home" ? "Ravi" : "Office");
+
+  const [sheetNames, setSheetNames] = useState<string[]>(calendarAccountSheetsMap[selectedCalendarAccount] || []);
+  const [selectedName, setSelectedName] = useState<string>(
+    selectedCalendarAccount === "Home" && calendarAccountSheetsMap.Home.includes("Ravi")
+      ? "Ravi"
+      : "Select a sheet"
+  );
+
   const [events, setEvents] = useState<Event[]>([]);
   const [bulkInput, setBulkInput] = useState<string>("");
 
-  const [selectedEventDuration, setSelectedEventDuration] = useState<number>(eventDurations[0]);
-
-  // Date management
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const [selectedDate, setSelectedDate] = useState<string>(tomorrow.toISOString().split("T")[0]);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [isRangeMode, setIsRangeMode] = useState<boolean>(true);
 
-  // Update sheets and selected name on calendar account change
   useEffect(() => {
     const sheets = calendarAccountSheetsMap[selectedCalendarAccount] || [];
     setSheetNames(sheets);
-
     if (selectedCalendarAccount === "Home" && sheets.includes("Ravi")) {
       setSelectedName("Ravi");
-    } else if (selectedCalendarAccount === "Office" && sheets.includes("Office")) {
-      setSelectedName("Office");
     } else {
       setSelectedName("Select a sheet");
     }
-
   }, [selectedCalendarAccount]);
 
-  // Fetch events when selected sheet or date or event duration changes
   useEffect(() => {
     if (selectedName !== "Select a sheet") {
       (async () => {
@@ -180,18 +150,27 @@ export default function EventsSheetYt() {
             const startHour = String(index).padStart(2, "0");
             const event = fetchedEvents[index] || {};
             const title = event.title || initialEventTitles[index] || "Empty Slot";
-            const startTimeDate = new Date(`${selectedDate}T${startHour}:00:00`);
-            const endTimeDate = new Date(startTimeDate.getTime() + selectedEventDuration * 60 * 1000);
-            const endHour = String(endTimeDate.getHours()).padStart(2, "0");
-            const endMinute = String(endTimeDate.getMinutes()).padStart(2, "0");
+
             return {
               start: `${selectedDate}T${startHour}:00:00`,
-              end: `${selectedDate}T${endHour}:${endMinute}:00`,
-              title: title,
-              youtubeHindi: event.youtubeHindi || `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
-              youtubeEnglish: event.youtubeEnglish || `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
-              youtubePlaylistHindi: event.youtubePlaylistHindi || `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
-              youtubePlaylistEnglish: event.youtubePlaylistEnglish || `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in English")}&sp=EgIQAw%3D%3D`,
+              end: `${selectedDate}T${startHour}:50:00`,
+              title,
+              youtubeHindi:
+                event.youtubeHindi ||
+                `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
+              youtubeEnglish:
+                event.youtubeEnglish ||
+                `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
+              youtubePlaylistHindi:
+                event.youtubePlaylistHindi ||
+                `https://www.youtube.com/results?search_query=${encodeURIComponent(
+                  title + " playlist in Hindi"
+                )}&sp=EgIQAw%3D%3D`,
+              youtubePlaylistEnglish:
+                event.youtubePlaylistEnglish ||
+                `https://www.youtube.com/results?search_query=${encodeURIComponent(
+                  title + " playlist in English"
+                )}&sp=EgIQAw%3D%3D`,
               timeZone: event.timeZone || "Asia/Kolkata",
             };
           });
@@ -204,20 +183,15 @@ export default function EventsSheetYt() {
     } else {
       updateEvents(selectedDate);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedName, selectedDate, selectedEventDuration]);
+  }, [selectedName, selectedDate]);
 
   const updateEvents = (date: string) => {
     const updatedEvents = Array.from({ length: 24 }).map((_, index) => {
       const startHour = String(index).padStart(2, "0");
-      const startTime = new Date(`${date}T${startHour}:00:00`);
-      const endTime = new Date(startTime.getTime() + selectedEventDuration * 60 * 1000);
-      const endHour = String(endTime.getHours()).padStart(2, "0");
-      const endMinute = String(endTime.getMinutes()).padStart(2, "0");
       const title = initialEventTitles[index] || "Empty Slot";
       return {
         start: `${date}T${startHour}:00:00`,
-        end: `${date}T${endHour}:${endMinute}:00`,
+        end: `${date}T${startHour}:50:00`,
         title,
         youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
         youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
@@ -236,8 +210,9 @@ export default function EventsSheetYt() {
     errorMessage: string
   ) => {
     try {
-      // Pass calendar account and sheet name as query params
-      const url = `${endpoint}?name=${encodeURIComponent(selectedName)}&calendarAccount=${encodeURIComponent(selectedCalendarAccount)}`;
+      const url = `${endpoint}?name=${encodeURIComponent(selectedName)}&calendarAccount=${encodeURIComponent(
+        selectedCalendarAccount
+      )}`;
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -258,25 +233,25 @@ export default function EventsSheetYt() {
       return;
     }
     const eventsToAdd = events.filter((e) => e.title !== "Empty Slot");
-    setSelectedEvents(eventsToAdd);
+
     const datesToProcess =
-      isRangeMode && dateRange?.from && dateRange?.to
-        ? getDatesBetween(dateRange.from, dateRange.to)
-        : [selectedDate];
+      isRangeMode && dateRange?.from && dateRange?.to ? getDatesBetween(dateRange.from, dateRange.to) : [selectedDate];
+
     if (isRangeMode && datesToProcess.length > 1) {
       const confirmed = window.confirm(
-        `Are you sure you want to add events to ${datesToProcess.length} days (${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]})?`
+        `Are you sure you want to add events to ${datesToProcess.length} days (${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]
+        })?`
       );
       if (!confirmed) return;
     }
+
     await handleEventAction(
       "/api/events-sheet-yt",
       {
         action: "addAll",
         events: eventsToAdd,
         dates: datesToProcess,
-        isRangeMode: isRangeMode,
-        eventDuration: selectedEventDuration,
+        isRangeMode,
       },
       `Events added to calendar for ${datesToProcess.length} day(s) and sheet updated successfully!`,
       "Failed to add events or update sheet!"
@@ -289,22 +264,20 @@ export default function EventsSheetYt() {
       return;
     }
     const datesToProcess =
-      isRangeMode && dateRange?.from && dateRange?.to
-        ? getDatesBetween(dateRange.from, dateRange.to)
-        : [selectedDate];
+      isRangeMode && dateRange?.from && dateRange?.to ? getDatesBetween(dateRange.from, dateRange.to) : [selectedDate];
     if (isRangeMode && datesToProcess.length > 1) {
       const confirmed = window.confirm(
-        `Are you sure you want to remove events from ${datesToProcess.length} days (${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]})?`
+        `Are you sure you want to remove events from ${datesToProcess.length} days (${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]
+        })?`
       );
       if (!confirmed) return;
     }
-    setSelectedEvents([]);
     await handleEventAction(
       "/api/events-sheet-yt",
       {
         action: "removeAll",
         dates: datesToProcess,
-        isRangeMode: isRangeMode,
+        isRangeMode,
       },
       `Events removed from calendar for ${datesToProcess.length} day(s) and sheet cleared successfully!`,
       "Failed to remove events or clear sheet!"
@@ -319,8 +292,12 @@ export default function EventsSheetYt() {
       title: newTitle,
       youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(newTitle + " in Hindi")}`,
       youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(newTitle + " in English")}`,
-      youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(newTitle + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
-      youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(newTitle + " playlist in English")}&sp=EgIQAw%3D%3D`,
+      youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(
+        newTitle + " playlist in Hindi"
+      )}&sp=EgIQAw%3D%3D`,
+      youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(
+        newTitle + " playlist in English"
+      )}&sp=EgIQAw%3D%3D`,
     };
     setEvents(updatedEvents);
   };
@@ -344,24 +321,26 @@ export default function EventsSheetYt() {
     while (pastedTitles.length < 24) {
       pastedTitles.push(initialEventTitles[pastedTitles.length] || "Empty Slot");
     }
+
     const updatedEvents = Array.from({ length: 24 }).map((_, index) => {
       const startHour = String(index).padStart(2, "0");
-      const startTime = new Date(`${selectedDate}T${startHour}:00:00`);
-      const endTime = new Date(startTime.getTime() + selectedEventDuration * 60 * 1000);
-      const endHour = String(endTime.getHours()).padStart(2, "0");
-      const endMinute = String(endTime.getMinutes()).padStart(2, "0");
       const title = pastedTitles[index];
       return {
         start: `${selectedDate}T${startHour}:00:00`,
-        end: `${selectedDate}T${endHour}:${endMinute}:00`,
+        end: `${selectedDate}T${startHour}:50:00`,
         title,
         youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
         youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
-        youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
-        youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in English")}&sp=EgIQAw%3D%3D`,
+        youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(
+          title + " playlist in Hindi"
+        )}&sp=EgIQAw%3D%3D`,
+        youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(
+          title + " playlist in English"
+        )}&sp=EgIQAw%3D%3D`,
         timeZone: "Asia/Kolkata",
       };
     });
+
     setEvents(updatedEvents);
     setBulkInput("");
     toast.success("Events updated from pasted data");
@@ -374,7 +353,14 @@ export default function EventsSheetYt() {
   };
 
   const handleLinkClick = (url: string) => {
-    copyToClipboard(url);
+    navigator.clipboard
+      .writeText(url)
+      .then(() => {
+        toast.success("Copied to clipboard!");
+      })
+      .catch(() => {
+        toast.error("Failed to copy to clipboard");
+      });
   };
 
   const handleDateRangeChange = (range: DateRange | undefined) => {
@@ -383,8 +369,8 @@ export default function EventsSheetYt() {
       const startDate = new Date(range.from);
       startDate.setHours(0, 0, 0, 0);
       const year = startDate.getFullYear();
-      const month = String(startDate.getMonth() + 1).padStart(2, '0');
-      const day = String(startDate.getDate()).padStart(2, '0');
+      const month = String(startDate.getMonth() + 1).padStart(2, "0");
+      const day = String(startDate.getDate()).padStart(2, "0");
       const startDateStr = `${year}-${month}-${day}`;
       setSelectedDate(startDateStr);
       updateEvents(startDateStr);
@@ -397,49 +383,11 @@ export default function EventsSheetYt() {
     if (isRangeMode) setDateRange(undefined);
   };
 
-  const toggleDateMode = () => {
-    setIsRangeMode(!isRangeMode);
-    setDateRange(undefined);
-  };
-
   return (
     <div className="p-4 h-dvh">
       {/* Controls */}
       <div className="mb-4">
         <div className="flex flex-wrap lg:flex-nowrap gap-2 items-center">
-
-          {/* Event duration dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">{selectedEventDuration} min</Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              {eventDurations.map(duration => (
-                <DropdownMenuItem
-                  key={duration}
-                  onClick={() => setSelectedEventDuration(duration)}
-                >
-                  {duration} min
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Calendar Account dropdown */}
-          {/* <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">{selectedCalendarAccount}</Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              {calendarAccounts.map(acc => (
-                <DropdownMenuItem key={acc} onClick={() => setSelectedCalendarAccount(acc)}>
-                  {acc}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu> */}
-
-          {/* Select Sheet dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline">{selectedName}</Button>
@@ -455,25 +403,10 @@ export default function EventsSheetYt() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Toggle Single/Range */}
-          {/* <Button
-            variant={isRangeMode ? "default" : "outline"}
-            onClick={toggleDateMode}
-            className="min-w-[80px]"
-          >
-            {isRangeMode ? "Range" : "Single"}
-          </Button> */}
-
           {isRangeMode ? (
-            <DateRangeForm
-              value={dateRange}
-              onChange={handleDateRangeChange}
-            />
+            <DateRangeForm value={dateRange} onChange={handleDateRangeChange} />
           ) : (
-            <CalendarForm
-              value={selectedDate}
-              onChange={handleSingleDateChange}
-            />
+            <CalendarForm value={selectedDate} onChange={handleSingleDateChange} />
           )}
 
           <Input
@@ -483,16 +416,21 @@ export default function EventsSheetYt() {
             placeholder="Paste comma-separated data here"
           />
           <Button onClick={handleBulkPaste}>Apply Paste</Button>
-          <Button variant="destructive" onClick={clearBulkInput}>×</Button>
+          <Button variant="destructive" onClick={clearBulkInput}>
+            ×
+          </Button>
         </div>
-
         <div className="mt-2 text-sm text-gray-600 font-bold">
-          {isRangeMode ? (dateRange?.from && dateRange?.to ? (
-            <span>
-              Selected range: {format(dateRange.from, "MMM dd, yyyy")} - {format(dateRange.to, "MMM dd, yyyy")}
-              ({getDatesBetween(dateRange.from, dateRange.to).length} days)
-            </span>
-          ) : <span>Please select a date range</span>) : (
+          {isRangeMode ? (
+            dateRange?.from && dateRange?.to ? (
+              <span>
+                Selected range: {format(dateRange.from, "MMM dd, yyyy")} - {format(dateRange.to, "MMM dd, yyyy")} (
+                {getDatesBetween(dateRange.from, dateRange.to).length} days)
+              </span>
+            ) : (
+              <span>Please select a date range</span>
+            )
+          ) : (
             <span>Selected date: {format(new Date(selectedDate), "MMM dd, yyyy")}</span>
           )}
         </div>
@@ -500,27 +438,20 @@ export default function EventsSheetYt() {
 
       {/* Events grid */}
       <div className="grid md:grid-cols-6 gap-4">
-        {Array.from({ length: 24 }).map((_, index) => {
-          const event = events[index] || {
-            start: `${selectedDate}T${String(index).padStart(2, "0")}:00:00`,
-            end: `${selectedDate}T${String(index).padStart(2, "0")}:50:00`,
-            title: initialEventTitles[index] || "Empty Slot",
-            youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent((initialEventTitles[index] || "Empty Slot") + " in Hindi")}`,
-            youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent((initialEventTitles[index] || "Empty Slot") + " in English")}`,
-            youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent((initialEventTitles[index] || "Empty Slot") + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
-            youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent((initialEventTitles[index] || "Empty Slot") + " playlist in English")}&sp=EgIQAw%3D%3D`,
-            timeZone: "Asia/Kolkata",
-          };
-          const isSelected = selectedEvents.some((e) => e.title === event.title && event.title !== "Empty Slot");
+        {events.map((event, index) => {
           const startHour = String(index).padStart(2, "0");
-          const timeRange = `${startHour}:00 - ${event.end.split("T")[1].slice(0, 5)}`;
-
           return (
-            <Card key={index} className={`p-2 gap-1 ${isSelected ? "border border-green-500 bg-green-100" : ""}`}>
+            <Card key={index} className="p-2 gap-1">
               <CardHeader className="p-0">
-                <div className="flex sm:flex-col lg:flex-row justify-between">
-                  <Badge><Clock10 className="w-4 h-4 mr-1" />{timeRange}</Badge>
-                  <Badge variant="outline"><BellDot className="w-4 h-4 mr-1" />5 min</Badge>
+                <div className="flex justify-between items-center gap-1">
+                  <Badge>
+                    <Clock10 className="w-4 h-4 mr-1" />
+                    {`${startHour}:00 - ${startHour}:05`} <span className="ml-2 text-xs">5m</span>
+                  </Badge>
+                  <Badge>
+                    <Clock10 className="w-4 h-4 mr-1" />
+                    {`${startHour}:10 - ${startHour}:50`} <span className="ml-2 text-xs">40m</span>
+                  </Badge>
                 </div>
               </CardHeader>
               <CardContent className="p-0 space-y-2">
@@ -559,13 +490,12 @@ export default function EventsSheetYt() {
         <Button
           variant="default"
           onClick={addEvents}
-          className={isRangeMode ? "bg-blue-600 hover:bg-blue-700" : ""}
           disabled={isRangeMode && (!dateRange?.from || !dateRange?.to)}
         >
           {isRangeMode
-            ? `Add Events to Range ${dateRange?.from && dateRange?.to ? `(${getDatesBetween(dateRange.from, dateRange.to).length} days)` : ''}`
-            : "Add All Events"
-          }
+            ? `Add Events to Range ${dateRange?.from && dateRange?.to ? `(${getDatesBetween(dateRange.from, dateRange.to).length} days)` : ""
+            }`
+            : "Add All Events"}
         </Button>
         <Button
           variant="destructive"
@@ -573,9 +503,9 @@ export default function EventsSheetYt() {
           disabled={isRangeMode && (!dateRange?.from || !dateRange?.to)}
         >
           {isRangeMode
-            ? `Remove Events from Range ${dateRange?.from && dateRange?.to ? `(${getDatesBetween(dateRange.from, dateRange.to).length} days)` : ''}`
-            : "Remove All Events"
-          }
+            ? `Remove Events from Range ${dateRange?.from && dateRange?.to ? `(${getDatesBetween(dateRange.from, dateRange.to).length} days)` : ""
+            }`
+            : "Remove All Events"}
         </Button>
       </div>
     </div>
