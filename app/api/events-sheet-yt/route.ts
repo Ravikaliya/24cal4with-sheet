@@ -1,13 +1,24 @@
 import { google, calendar_v3 } from "googleapis";
 import { join } from "path";
 import { NextResponse } from "next/server";
+import { existsSync } from "fs";
 
-const KEYFILEPATH = join(process.cwd(), "lib", "service-account-key.json");
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar",
-  "https://www.googleapis.com/auth/spreadsheets",
 ];
 
+const serviceAccountKeys = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+// const serviceAccountKeys = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
+//   ? JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY)
+//   : undefined;
+
+// Paths for service account keys by calendar account
+const SERVICE_ACCOUNT_KEYS: Record<string, string> = {
+  Home: join(process.cwd(), "lib", "service-account-home.json"),
+  // Office removed per request
+};
+
+// Mapping of sheet/account name to calendar ID env vars (Office removed)
 const CALENDAR_IDS: { [key: string]: string | undefined } = {
   Achal: process.env.Achal_Calendar_ID,
   Neeraj: process.env.Neeraj_Calendar_ID,
@@ -16,9 +27,8 @@ const CALENDAR_IDS: { [key: string]: string | undefined } = {
   Jyoti: process.env.Jyoti_Calendar_ID,
   Ravi: process.env.Ravi_Calendar_ID,
   Govt: process.env.Govt_Calendar_ID,
+  // Office: process.env.Office_Calendar_ID,  // removed
 };
-
-const SHEET_NAMES = Object.keys(CALENDAR_IDS).filter((name) => CALENDAR_IDS[name]);
 
 interface Event {
   start: string;
@@ -26,314 +36,244 @@ interface Event {
   title: string;
   youtubeHindi: string;
   youtubeEnglish: string;
+  youtubePlaylistHindi: string;
+  youtubePlaylistEnglish: string;
   timeZone: string;
 }
 
-const authenticate = async () => {
+const authenticate = async (calendarAccount: string) => {
+  if (calendarAccount !== "Home") {
+    calendarAccount = "Home"; // force to Home only
+  }
+
+  const keyFilePath =
+    (serviceAccountKeys && typeof serviceAccountKeys === "object" && serviceAccountKeys[calendarAccount])
+    || SERVICE_ACCOUNT_KEYS[calendarAccount];
+  if (!keyFilePath || !existsSync(keyFilePath)) {
+    console.error(`Missing service account JSON for ${calendarAccount} at ${keyFilePath}`);
+    return NextResponse.json({
+      error: `Service account credentials missing for ${calendarAccount}`,
+    }, { status: 500 });
+  }
+
   try {
-    return new google.auth.GoogleAuth({
-      keyFile: KEYFILEPATH,
+    const auth = new google.auth.GoogleAuth({
+      keyFile: keyFilePath,
       scopes: SCOPES,
     });
+    console.log(`Authentication successful for ${calendarAccount}`);
+    return auth;
   } catch (error) {
     console.error("Authentication failed:", error);
-    throw new Error("Failed to authenticate with Google APIs");
+    if (error instanceof Error) {
+      console.error("Error details:", error.stack);
+    }
+    return NextResponse.json({
+      error: "Failed to authenticate with Google APIs",
+      details: error instanceof Error ? error.message : String(error),
+      keyFilePath,
+      keyFileExists: existsSync(keyFilePath),
+    }, { status: 500 });
   }
 };
 
-const ensureSheetsExist = async (sheets: ReturnType<typeof google.sheets>, spreadsheetId: string) => {
-  try {
-    const response = await sheets.spreadsheets.get({
-      spreadsheetId,
-    });
-    const existingSheets = response.data.sheets?.map((sheet) => sheet.properties?.title) || [];
-
-    for (const sheetName of SHEET_NAMES) {
-      if (!existingSheets.includes(sheetName)) {
-        console.log(`Creating sheet: ${sheetName}`);
-        await sheets.spreadsheets.batchUpdate({
-          spreadsheetId,
-          requestBody: {
-            requests: [
-              {
-                addSheet: {
-                  properties: {
-                    title: sheetName,
-                  },
-                },
-              },
-            ],
-          },
-        });
-
-        await sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: `${sheetName}!A1:D1`,
-          valueInputOption: "RAW",
-          requestBody: {
-            values: [["Start - End", "Title", "YouTube Hindi", "YouTube English"]],
-          },
-        });
-      }
-    }
-  } catch (error) {
-    console.error("Error ensuring sheets exist:", error);
-    throw error;
-  }
-};
-
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const action = searchParams.get("action");
-
-  const auth = await authenticate();
-  const sheets = google.sheets({ version: "v4", auth });
-
-  const spreadsheetId = process.env.SPREADSHEET_ID;
-  if (!spreadsheetId) {
-    return NextResponse.json(
-      { message: "SPREADSHEET_ID is not set in environment variables" },
-      { status: 500 }
-    );
-  }
-
-  await ensureSheetsExist(sheets, spreadsheetId);
-
-  if (action === "getSheetNames") {
-    return NextResponse.json({ sheetNames: SHEET_NAMES });
-  }
-
-  if (action === "getEvents") {
-    const sheetName = searchParams.get("sheetName");
-    if (!sheetName || !SHEET_NAMES.includes(sheetName)) {
-      return NextResponse.json(
-        { message: `Invalid or missing sheet name: ${sheetName}. Expected one of: ${SHEET_NAMES.join(", ")}` },
-        { status: 400 }
-      );
-    }
-
-    try {
-      console.log(`Fetching events from Spreadsheet ID: ${spreadsheetId}, Sheet: ${sheetName}`);
-      const response = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: `${sheetName}!A:D`,
-      });
-
-      const rows = response.data.values || [];
-      const events: Event[] = rows.slice(1).map((row, index) => {
-        const [timeRange, title, youtubeHindi, youtubeEnglish] = row as [string, string, string, string];
-        const startHour = String(index).padStart(2, "0");
-        const defaultTimeRange = `${startHour}:00 - ${startHour}:50`;
-        const [startTime, endTime] = (timeRange || defaultTimeRange).split(" - ");
-        const today = new Date().toISOString().split("T")[0];
-        return {
-          start: `${today}T${startTime}:00`,
-          end: `${today}T${endTime}:00`,
-          title: title || "",
-          youtubeHindi: youtubeHindi || `https://www.youtube.com/results?search_query=${encodeURIComponent((title || "") + " in Hindi")}`,
-          youtubeEnglish: youtubeEnglish || `https://www.youtube.com/results?search_query=${encodeURIComponent((title || "") + " in English")}`,
-          timeZone: "Asia/Kolkata",
-        };
-      });
-
-      return NextResponse.json({ events });
-    } catch (error) {
-      console.error(`Error fetching events for ${sheetName}:`, error);
-      if (error instanceof Error && "response" in error) {
-        const apiError = error as any;
-        return NextResponse.json(
-          { message: "Failed to fetch events", error: apiError.response?.data?.error?.message || error.message },
-          { status: apiError.response?.status || 500 }
-        );
-      }
-      return NextResponse.json(
-        { message: "Unknown error fetching events", error: String(error) },
-        { status: 500 }
-      );
-    }
-  }
-
-  return NextResponse.json({ message: "Events Sheet YT API is running" });
-}
+// export async function GET(request: Request) {
+//   return NextResponse.json({ message: "Google Calendar integration API is running." });
+// }
 
 export async function POST(request: Request) {
   const { searchParams } = new URL(request.url);
   const name = searchParams.get("name") || "Vivek";
-  const calendarId = CALENDAR_IDS[name];
+  const calendarAccount = "Home";
 
+  const calendarId = CALENDAR_IDS[name];
   if (!calendarId) {
-    console.error(`No calendar ID found for name: ${name}`);
     return NextResponse.json(
-      { message: `Invalid or missing calendar ID for ${name}. Check environment variables.` },
-      { status: 400 }
+      { error: `Invalid or missing calendar ID for ${name}. Check environment variables.` },
+      { status: 400 },
     );
   }
 
-  let body: { action: string; events?: Event[] };
+  const auth = await authenticate(calendarAccount);
+  if (auth instanceof NextResponse) return auth;
+
+  let body: {
+    action: string;
+    events?: Event[];
+    selectedDate?: string;
+    dates?: string[];
+    isRangeMode?: boolean;
+  };
+
   try {
     body = await request.json();
   } catch (error) {
-    console.error("Failed to parse request body:", error);
     return NextResponse.json(
-      { message: "Invalid JSON in request body" },
+      { error: "Invalid JSON in request body", details: error instanceof Error ? error.message : String(error) },
       { status: 400 }
     );
   }
 
-  const { action, events } = body;
+  const { action, events, selectedDate, dates, isRangeMode } = body;
 
   if (!action) {
-    return NextResponse.json({ message: "Missing action in request body" }, { status: 400 });
+    return NextResponse.json({ error: "Missing action in request body" }, { status: 400 });
   }
 
-  const auth = await authenticate();
+  const datesToProcess = dates && dates.length > 0 ? dates : (selectedDate ? [selectedDate] : []);
+  if (datesToProcess.length === 0) {
+    return NextResponse.json({ error: "No valid dates provided" }, { status: 400 });
+  }
+
   const calendar = google.calendar({ version: "v3", auth });
-  const sheets = google.sheets({ version: "v4", auth });
-  const spreadsheetId = process.env.SPREADSHEET_ID;
-
-  if (!spreadsheetId) {
-    return NextResponse.json(
-      { message: "SPREADSHEET_ID is not set in environment variables" },
-      { status: 500 }
-    );
-  }
+  const timeZone = "Asia/Kolkata";
 
   try {
     if (action === "addAll") {
       if (!events || !Array.isArray(events)) {
-        console.error("Invalid or missing events array:", events);
-        return NextResponse.json(
-          { message: "Events must be an array" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "Events must be an array" }, { status: 400 });
       }
 
-      console.log(`Adding events to calendar: ${calendarId}`);
-      for (const evt of events) {
-        if (!evt.title || !evt.start || !evt.timeZone) {
-          console.error("Invalid event data:", evt);
-          throw new Error("Missing required fields (title, start, timeZone) in one or more events.");
+      console.log(`Adding events to calendar: ${calendarId} for ${datesToProcess.length} date(s): ${datesToProcess.join(", ")}`);
+
+      let totalEventsAdded = 0;
+
+      for (const dateStr of datesToProcess) {
+        console.log(`Processing events for date: ${dateStr}`);
+
+        for (const evt of events) {
+          // Extract hour from event start
+          const hour = evt.start.split("T")[1].slice(0, 2);
+
+          // First event: 5 minutes from HH:00 to HH:05
+          const start1 = `${dateStr}T${hour}:00:00`;
+          const end1 = `${dateStr}T${hour}:05:00`;
+
+          // Second event: 40 minutes from HH:10 to HH:50
+          const start2 = `${dateStr}T${hour}:10:00`;
+          const end2 = `${dateStr}T${hour}:50:00`;
+
+          for (const [startTime, endTime] of [[start1, end1], [start2, end2]]) {
+            try {
+              await calendar.events.insert({
+                calendarId,
+                requestBody: {
+                  summary: evt.title,
+                  description:
+                    `Hindi: ${evt.youtubeHindi || ""}\n` +
+                    `English: ${evt.youtubeEnglish || ""}\n` +
+                    `Playlist (Hindi): ${evt.youtubePlaylistHindi || ""}\n` +
+                    `Playlist (English): ${evt.youtubePlaylistEnglish || ""}`,
+                  start: { dateTime: new Date(startTime).toISOString(), timeZone: evt.timeZone },
+                  end: { dateTime: new Date(endTime).toISOString(), timeZone: evt.timeZone },
+                  reminders: {
+                    useDefault: false,
+                    overrides: [{ method: "popup", minutes: 5 }],
+                  },
+                },
+              });
+              totalEventsAdded++;
+              console.log(`Added event '${evt.title}' on ${dateStr} from ${startTime} to ${endTime}`);
+            } catch (insertError) {
+              console.error(`Failed to insert event '${evt.title}' on ${dateStr} from ${startTime} to ${endTime}:`, insertError);
+            }
+          }
         }
-
-        console.log(`Raw event data:`, evt);
-
-        const startDateTime = new Date(evt.start);
-        let endDateTime = new Date(evt.end);
-
-        if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
-          console.error("Invalid date in event:", evt);
-          throw new Error("Invalid start or end date in one or more events.");
-        }
-
-        const startTimeMs = startDateTime.getTime();
-        const endTimeMs = endDateTime.getTime();
-        if (endTimeMs <= startTimeMs) {
-          console.warn(`Adjusting end time for event: ${evt.title}, original end: ${evt.end}`);
-          endDateTime = new Date(startTimeMs + 50 * 60 * 1000);
-        }
-
-        const startISO = startDateTime.toISOString();
-        const endISO = endDateTime.toISOString();
-
-        console.log(`Processed event: ${evt.title}, Start: ${startISO}, End: ${endISO}, TimeZone: ${evt.timeZone}`);
-
-        await calendar.events.insert({
-          calendarId,
-          requestBody: {
-            summary: evt.title,
-            description: `Hindi: ${evt.youtubeHindi || ""}\nEnglish: ${evt.youtubeEnglish || ""}`,
-            start: {
-              dateTime: startISO,
-              timeZone: evt.timeZone,
-            },
-            end: {
-              dateTime: endISO,
-              timeZone: evt.timeZone,
-            },
-          },
-        });
       }
 
-      const sheetRange = `${name}!A2:D${events.length + 1}`;
-      const sheetValues = events.map((evt, index) => {
-        const startHour = String(index).padStart(2, "0");
-        const timeRange = `${startHour}:00 - ${startHour}:50`;
-        return [timeRange, evt.title, evt.youtubeHindi || "", evt.youtubeEnglish || ""];
-      });
+      const message = isRangeMode
+        ? `${totalEventsAdded} events added to calendar across ${datesToProcess.length} days successfully!`
+        : `${totalEventsAdded} events added to calendar for ${datesToProcess[0]} successfully!`;
 
-      console.log(`Updating sheet ${name} with range ${sheetRange}:`, sheetValues);
-
-      await sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range: sheetRange,
-        valueInputOption: "RAW",
-        requestBody: {
-          values: sheetValues,
-        },
-      });
-
-      return NextResponse.json({ message: "All events added to calendar and sheet updated successfully!" });
+      return NextResponse.json({ message });
     }
 
     if (action === "removeAll") {
-      console.log(`Removing all events from calendar: ${calendarId}`);
-      
-      let pageToken: string | undefined = undefined;
-      const allEvents: calendar_v3.Schema$Event[] = [];
-      
-      do {
-        const response: calendar_v3.Schema$Events = await calendar.events.list({
-          calendarId,
-          pageToken,
-        }).then(res => res.data);
-        
-        const events = response.items || [];
-        allEvents.push(...events);
-        pageToken = response.nextPageToken ?? undefined;
-      } while (pageToken);
+      console.log(`Attempting to remove events from calendar: ${calendarId} for ${datesToProcess.length} date(s): ${datesToProcess.join(", ")}`);
 
-      console.log(`Found ${allEvents.length} events to delete from calendar: ${calendarId}`);
+      let totalDeletedEvents = 0;
 
-      for (const evt of allEvents) {
-        if (evt.id) {
+      for (const dateStr of datesToProcess) {
+        console.log(`Processing deletion for date: ${dateStr}`);
+
+        // Use Asia/Kolkata timezone explicit date range
+        const searchStart = `${dateStr}T00:00:00+05:30`;
+        const searchEnd = `${dateStr}T23:59:59+05:30`;
+
+        let pageToken: string | undefined = undefined;
+        const eventsToDelete: calendar_v3.Schema$Event[] = [];
+
+        do {
           try {
-            await calendar.events.delete({
+            const response: calendar_v3.Schema$Events = await calendar.events.list({
               calendarId,
-              eventId: evt.id,
+              pageToken,
+              timeMin: searchStart,
+              timeMax: searchEnd,
+              singleEvents: true,
+              orderBy: "startTime",
+            }).then((res) => res.data);
+
+            const fetchedEvents = response.items || [];
+
+            // Filter events exactly matching the date in timezone
+            const filteredEvents = fetchedEvents.filter((event) => {
+              if (!event.start?.dateTime) return false;
+              const eventStart = new Date(event.start.dateTime);
+              // Convert to Asia/Kolkata local date string
+              const localDateStr = eventStart.toLocaleDateString("en-CA", {
+                timeZone, // "en-CA" outputs yyyy-mm-dd format
+              });
+              return localDateStr === dateStr;
             });
-            console.log(`Deleted event: ${evt.summary} (ID: ${evt.id})`);
-          } catch (deleteError) {
-            console.error(`Failed to delete event ${evt.id}:`, deleteError);
+
+            eventsToDelete.push(...filteredEvents);
+            pageToken = response.nextPageToken ?? undefined;
+          } catch (listError) {
+            console.error(`Failed to list events for ${dateStr}:`, listError);
+            break;
           }
-        } else {
-          console.warn(`Event without ID found: ${JSON.stringify(evt)}`);
+        } while (pageToken);
+
+        console.log(`Found ${eventsToDelete.length} events to delete for ${dateStr}`);
+
+        for (const evt of eventsToDelete) {
+          if (evt.id) {
+            try {
+              await calendar.events.delete({
+                calendarId,
+                eventId: evt.id,
+              });
+              totalDeletedEvents++;
+              console.log(`Deleted event: ${evt.summary} (ID: ${evt.id}) for ${dateStr} at ${evt.start?.dateTime}`);
+            } catch (deleteError: any) {
+              if (deleteError.code === 404) {
+                console.warn(`Event ${evt.id} not found for ${dateStr}, likely already deleted.`);
+              } else if (deleteError.code === 403) {
+                console.error(`Permission denied to delete event ${evt.id} for ${dateStr}`);
+              } else {
+                console.error(`Failed to delete event ${evt.id} for ${dateStr}:`, deleteError.message);
+              }
+            }
+          } else {
+            console.warn(`Event without ID found for ${dateStr}, cannot delete: ${evt.summary || "Unknown event"}`);
+          }
         }
       }
 
-      console.log(`Clearing sheet ${name} data below headers`);
-      await sheets.spreadsheets.values.clear({
-        spreadsheetId,
-        range: `${name}!A2:D`,
-      });
+      const message = isRangeMode
+        ? `${totalDeletedEvents} events removed from calendar across ${datesToProcess.length} days successfully!`
+        : `${totalDeletedEvents} events removed from calendar for ${datesToProcess[0]} successfully!`;
 
-      return NextResponse.json({ 
-        message: `All ${allEvents.length} events removed from calendar and sheet cleared successfully!` 
-      });
+      return NextResponse.json({ message });
     }
 
-    return NextResponse.json({ message: "Invalid action" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (error) {
     console.error(`Error processing POST request for ${name}:`, error);
-    if (error instanceof Error && "response" in error) {
-      const apiError = error as any;
-      return NextResponse.json(
-        { message: "Failed to process request", error: apiError.response?.data?.error?.message || error.message },
-        { status: apiError.response?.status || 400 }
-      );
-    }
-    return NextResponse.json(
-      { message: "Error processing request", error: error instanceof Error ? error.message : String(error) },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      error: "Failed to process request",
+      details: error instanceof Error ? error.message : String(error),
+    }, { status: 500 });
   }
 }
