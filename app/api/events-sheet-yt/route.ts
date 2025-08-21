@@ -7,6 +7,11 @@ const SCOPES = [
   "https://www.googleapis.com/auth/calendar",
 ];
 
+const serviceAccountKeys = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+// const serviceAccountKeys = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
+//   ? JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY)
+//   : undefined;
+
 // Paths for service account keys by calendar account
 const SERVICE_ACCOUNT_KEYS: Record<string, string> = {
   Home: join(process.cwd(), "lib", "service-account-home.json"),
@@ -41,7 +46,9 @@ const authenticate = async (calendarAccount: string) => {
     calendarAccount = "Home"; // force to Home only
   }
 
-  const keyFilePath = SERVICE_ACCOUNT_KEYS[calendarAccount];
+  const keyFilePath =
+    (serviceAccountKeys && typeof serviceAccountKeys === "object" && serviceAccountKeys[calendarAccount])
+    || SERVICE_ACCOUNT_KEYS[calendarAccount];
   if (!keyFilePath || !existsSync(keyFilePath)) {
     console.error(`Missing service account JSON for ${calendarAccount} at ${keyFilePath}`);
     return NextResponse.json({

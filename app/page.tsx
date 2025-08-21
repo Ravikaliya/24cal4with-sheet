@@ -132,25 +132,80 @@ export default function EventsSheetYt() {
     }
   }, [selectedCalendarAccount]);
 
+  // useEffect(() => {
+  //   if (selectedName !== "Select a sheet") {
+  //     (async () => {
+  //       try {
+  //         const res = await fetch(
+  //           `/api/events-sheet-yt?action=getEvents&sheetName=${encodeURIComponent(selectedName)}&date=${selectedDate}`
+  //         );
+  //         if (!res.ok) {
+  //           const eData = await res.json().catch(() => ({}));
+  //           throw new Error(eData.error || "Failed to fetch events");
+  //         }
+  //         const data = await res.json();
+  //         const fetchedEvents = data.events || [];
+
+  //         const adjustedEvents = Array.from({ length: 24 }).map((_, index) => {
+  //           const startHour = String(index).padStart(2, "0");
+  //           const event = fetchedEvents[index] || {};
+  //           const title = event.title || initialEventTitles[index] || "Empty Slot";
+
+  //           return {
+  //             start: `${selectedDate}T${startHour}:00:00`,
+  //             end: `${selectedDate}T${startHour}:50:00`,
+  //             title,
+  //             youtubeHindi:
+  //               event.youtubeHindi ||
+  //               `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
+  //             youtubeEnglish:
+  //               event.youtubeEnglish ||
+  //               `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
+  //             youtubePlaylistHindi:
+  //               event.youtubePlaylistHindi ||
+  //               `https://www.youtube.com/results?search_query=${encodeURIComponent(
+  //                 title + " playlist in Hindi"
+  //               )}&sp=EgIQAw%3D%3D`,
+  //             youtubePlaylistEnglish:
+  //               event.youtubePlaylistEnglish ||
+  //               `https://www.youtube.com/results?search_query=${encodeURIComponent(
+  //                 title + " playlist in English"
+  //               )}&sp=EgIQAw%3D%3D`,
+  //             timeZone: event.timeZone || "Asia/Kolkata",
+  //           };
+  //         });
+  //         setEvents(adjustedEvents);
+  //       } catch (error) {
+  //         toast.error(error instanceof Error ? error.message : "Error fetching events");
+  //         console.error(error);
+  //       }
+  //     })();
+  //   } else {
+  //     updateEvents(selectedDate);
+  //   }
+  // }, [selectedName, selectedDate]);
+
+  const fetchTodaysEvents = async () => {
+    const res = await fetch(
+      `/api/events-sheet-yt?action=getEvents&sheetName=${encodeURIComponent(selectedName)}&date=${selectedDate}`
+    );
+    if (!res.ok) throw new Error('Failed to fetch events');
+    const data = await res.json();
+    return data.events || [];
+  };
+
+
   useEffect(() => {
     if (selectedName !== "Select a sheet") {
       (async () => {
         try {
-          const res = await fetch(
-            `/api/events-sheet-yt?action=getEvents&sheetName=${encodeURIComponent(selectedName)}&date=${selectedDate}`
-          );
-          if (!res.ok) {
-            const eData = await res.json().catch(() => ({}));
-            throw new Error(eData.error || "Failed to fetch events");
-          }
-          const data = await res.json();
-          const fetchedEvents = data.events || [];
-
+          const fetchedEvents = await fetchTodaysEvents();
+          // Map 24 slots
           const adjustedEvents = Array.from({ length: 24 }).map((_, index) => {
             const startHour = String(index).padStart(2, "0");
             const event = fetchedEvents[index] || {};
+            // Title: from fetched event if available, else fallback
             const title = event.title || initialEventTitles[index] || "Empty Slot";
-
             return {
               start: `${selectedDate}T${startHour}:00:00`,
               end: `${selectedDate}T${startHour}:50:00`,
@@ -163,14 +218,10 @@ export default function EventsSheetYt() {
                 `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
               youtubePlaylistHindi:
                 event.youtubePlaylistHindi ||
-                `https://www.youtube.com/results?search_query=${encodeURIComponent(
-                  title + " playlist in Hindi"
-                )}&sp=EgIQAw%3D%3D`,
+                `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
               youtubePlaylistEnglish:
                 event.youtubePlaylistEnglish ||
-                `https://www.youtube.com/results?search_query=${encodeURIComponent(
-                  title + " playlist in English"
-                )}&sp=EgIQAw%3D%3D`,
+                `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in English")}&sp=EgIQAw%3D%3D`,
               timeZone: event.timeZone || "Asia/Kolkata",
             };
           });
@@ -178,12 +229,15 @@ export default function EventsSheetYt() {
         } catch (error) {
           toast.error(error instanceof Error ? error.message : "Error fetching events");
           console.error(error);
+          // fallback: populate with initialEventTitles
+          updateEvents(selectedDate);
         }
       })();
     } else {
       updateEvents(selectedDate);
     }
   }, [selectedName, selectedDate]);
+
 
   const updateEvents = (date: string) => {
     const updatedEvents = Array.from({ length: 24 }).map((_, index) => {
@@ -439,18 +493,18 @@ export default function EventsSheetYt() {
       {/* Events grid */}
       <div className="grid md:grid-cols-6 gap-4">
         {events.map((event, index) => {
-          const startHour = String(index).padStart(2, "0");
+          const startHour = String(index).padStart(1, "0");
           return (
             <Card key={index} className="p-2 gap-1">
               <CardHeader className="p-0">
                 <div className="flex justify-between items-center gap-1">
                   <Badge>
                     <Clock10 className="w-4 h-4 mr-1" />
-                    {`${startHour}:00 - ${startHour}:05`} <span className="ml-2 text-xs">5m</span>
+                    {`${startHour}`}
                   </Badge>
                   <Badge>
                     <Clock10 className="w-4 h-4 mr-1" />
-                    {`${startHour}:10 - ${startHour}:50`} <span className="ml-2 text-xs">40m</span>
+                    <span className="text-xs">5m-40m</span>
                   </Badge>
                 </div>
               </CardHeader>
