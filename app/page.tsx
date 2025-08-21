@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { BellDot, Clock10, CalendarIcon } from "lucide-react";
+import { Clock10, CalendarIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -104,7 +104,8 @@ const getDatesBetween = (startDate: Date, endDate: Date): string[] => {
 
 export default function EventsSheetYt() {
   const calendarAccounts = Object.keys(calendarAccountSheetsMap);
-  const [selectedCalendarAccount, setSelectedCalendarAccount] = useState<string>(calendarAccounts[0]);
+  const selectedCalendarAccount = calendarAccounts[0]; // Use const (never changes)
+  const isRangeMode = true; // Use const (never changes)
 
   const [sheetNames, setSheetNames] = useState<string[]>(calendarAccountSheetsMap[selectedCalendarAccount] || []);
   const [selectedName, setSelectedName] = useState<string>(
@@ -120,7 +121,6 @@ export default function EventsSheetYt() {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const [selectedDate, setSelectedDate] = useState<string>(tomorrow.toISOString().split("T")[0]);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const [isRangeMode, setIsRangeMode] = useState<boolean>(true);
 
   useEffect(() => {
     const sheets = calendarAccountSheetsMap[selectedCalendarAccount] || [];
@@ -132,59 +132,6 @@ export default function EventsSheetYt() {
     }
   }, [selectedCalendarAccount]);
 
-  // useEffect(() => {
-  //   if (selectedName !== "Select a sheet") {
-  //     (async () => {
-  //       try {
-  //         const res = await fetch(
-  //           `/api/events-sheet-yt?action=getEvents&sheetName=${encodeURIComponent(selectedName)}&date=${selectedDate}`
-  //         );
-  //         if (!res.ok) {
-  //           const eData = await res.json().catch(() => ({}));
-  //           throw new Error(eData.error || "Failed to fetch events");
-  //         }
-  //         const data = await res.json();
-  //         const fetchedEvents = data.events || [];
-
-  //         const adjustedEvents = Array.from({ length: 24 }).map((_, index) => {
-  //           const startHour = String(index).padStart(2, "0");
-  //           const event = fetchedEvents[index] || {};
-  //           const title = event.title || initialEventTitles[index] || "Empty Slot";
-
-  //           return {
-  //             start: `${selectedDate}T${startHour}:00:00`,
-  //             end: `${selectedDate}T${startHour}:50:00`,
-  //             title,
-  //             youtubeHindi:
-  //               event.youtubeHindi ||
-  //               `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
-  //             youtubeEnglish:
-  //               event.youtubeEnglish ||
-  //               `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
-  //             youtubePlaylistHindi:
-  //               event.youtubePlaylistHindi ||
-  //               `https://www.youtube.com/results?search_query=${encodeURIComponent(
-  //                 title + " playlist in Hindi"
-  //               )}&sp=EgIQAw%3D%3D`,
-  //             youtubePlaylistEnglish:
-  //               event.youtubePlaylistEnglish ||
-  //               `https://www.youtube.com/results?search_query=${encodeURIComponent(
-  //                 title + " playlist in English"
-  //               )}&sp=EgIQAw%3D%3D`,
-  //             timeZone: event.timeZone || "Asia/Kolkata",
-  //           };
-  //         });
-  //         setEvents(adjustedEvents);
-  //       } catch (error) {
-  //         toast.error(error instanceof Error ? error.message : "Error fetching events");
-  //         console.error(error);
-  //       }
-  //     })();
-  //   } else {
-  //     updateEvents(selectedDate);
-  //   }
-  // }, [selectedName, selectedDate]);
-
   const fetchTodaysEvents = async () => {
     const res = await fetch(
       `/api/events-sheet-yt?action=getEvents&sheetName=${encodeURIComponent(selectedName)}&date=${selectedDate}`
@@ -193,7 +140,6 @@ export default function EventsSheetYt() {
     const data = await res.json();
     return data.events || [];
   };
-
 
   useEffect(() => {
     if (selectedName !== "Select a sheet") {
@@ -237,7 +183,6 @@ export default function EventsSheetYt() {
       updateEvents(selectedDate);
     }
   }, [selectedName, selectedDate]);
-
 
   const updateEvents = (date: string) => {
     const updatedEvents = Array.from({ length: 24 }).map((_, index) => {

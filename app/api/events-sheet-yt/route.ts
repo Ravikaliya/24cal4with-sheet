@@ -77,9 +77,9 @@ const authenticate = async (calendarAccount: string) => {
   }
 };
 
-export async function GET(request: Request) {
-  return NextResponse.json({ message: "Google Calendar integration API is running." });
-}
+// export async function GET(request: Request) {
+//   return NextResponse.json({ message: "Google Calendar integration API is running." });
+// }
 
 export async function POST(request: Request) {
   const { searchParams } = new URL(request.url);
