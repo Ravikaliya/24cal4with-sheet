@@ -14,7 +14,7 @@ const CALENDAR_IDS: { [key: string]: string | undefined } = {
   Jyoti: process.env.Jyoti_Calendar_ID,
   Ravi: process.env.Ravi_Calendar_ID,
   Govt: process.env.Govt_Calendar_ID,
-  // Office: process.env.Office_Calendar_ID, // removed as per your setup
+  // Add others as needed
 };
 
 interface Event {
@@ -28,25 +28,28 @@ interface Event {
   timeZone: string;
 }
 
-// Parse and cache service account keys JSON from environment variable
+// Parse and cache google service account keys from env variable
 let parsedServiceAccountKeys: any;
 try {
   if (!process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
     throw new Error("Missing GOOGLE_SERVICE_ACCOUNT_KEY environment variable.");
   }
   parsedServiceAccountKeys = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+  console.log("Loaded GOOGLE_SERVICE_ACCOUNT_KEY successfully");
 } catch (e) {
   parsedServiceAccountKeys = undefined;
   console.error("Failed to parse GOOGLE_SERVICE_ACCOUNT_KEY:", e);
 }
 
-// Google API authentication helper
+// Authenticate helper function
 const authenticate = async (calendarAccount: string) => {
-  // Force calendarAccount to "Home" or adjust per your logic
+  // Force calendarAccount to "Home" if you want single-account usage
   if (calendarAccount !== "Home") calendarAccount = "Home";
 
-  // Support both nested keys { Home: {...} } or flat single key {...}
+  // Support nested or flat keys
   const serviceAccount = parsedServiceAccountKeys?.[calendarAccount] || parsedServiceAccountKeys;
+
+  console.log(`Authenticating for ${calendarAccount}. Service account found: ${!!serviceAccount}`);
 
   if (!serviceAccount) {
     console.error(`Missing service account credentials for ${calendarAccount}`);
@@ -61,13 +64,9 @@ const authenticate = async (calendarAccount: string) => {
       credentials: serviceAccount,
       scopes: SCOPES,
     });
-    console.log(`Authentication successful for ${calendarAccount}`);
     return auth;
   } catch (error) {
     console.error("Authentication failed:", error);
-    if (error instanceof Error) {
-      console.error("Error details:", error.stack);
-    }
     return NextResponse.json(
       {
         error: "Failed to authenticate with Google APIs",
@@ -78,7 +77,7 @@ const authenticate = async (calendarAccount: string) => {
   }
 };
 
-// GET handler for fetching events
+// GET handler - fetch events for given sheetName and date
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const action = searchParams.get("action");
@@ -97,7 +96,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: `Invalid calendar ID for ${sheetName}` }, { status: 400 });
   }
 
-  const calendarAccount = "Home"; // adjust if you support multiple accounts
+  const calendarAccount = "Home";
   const auth = await authenticate(calendarAccount);
   if (auth instanceof NextResponse) return auth;
 
@@ -105,7 +104,6 @@ export async function GET(request: Request) {
   const timeZone = "Asia/Kolkata";
 
   try {
-    // Define the date time range for event fetch (full day in Asia/Kolkata)
     const timeMin = `${date}T00:00:00+05:30`;
     const timeMax = `${date}T23:59:59+05:30`;
 
@@ -119,11 +117,12 @@ export async function GET(request: Request) {
 
     const items = eventsResponse.data.items || [];
 
+    // Map Google Calendar events to your Event interface shape if needed
     const events = items.map((evt) => ({
       start: evt.start?.dateTime || "",
       end: evt.end?.dateTime || "",
       title: evt.summary || "",
-      youtubeHindi: "", // You could parse from description if structured
+      youtubeHindi: "", // You can parse these from description if structured
       youtubeEnglish: "",
       youtubePlaylistHindi: "",
       youtubePlaylistEnglish: "",
@@ -140,7 +139,7 @@ export async function GET(request: Request) {
   }
 }
 
-// POST handler for adding/removing events
+// POST handler - add or remove events based on action
 export async function POST(request: Request) {
   const { searchParams } = new URL(request.url);
   const name = searchParams.get("name") || "Vivek";
@@ -259,7 +258,7 @@ export async function POST(request: Request) {
 
             const fetchedEvents = response.items || [];
 
-            const filteredEvents = fetchedEvents.filter((event) => {
+            const filteredEvents = fetchedEvents.filter(event => {
               if (!event.start?.dateTime) return false;
               const eventStart = new Date(event.start.dateTime);
               const localDateStr = eventStart.toLocaleDateString("en-CA", { timeZone });
@@ -281,7 +280,7 @@ export async function POST(request: Request) {
               totalDeletedEvents++;
             } catch (deleteError: any) {
               if (deleteError.code === 404) {
-                console.warn(`Event ${evt.id} not found for ${dateStr}, likely already deleted.`);
+                console.warn(`Event ${evt.id} not found for ${dateStr}, already deleted.`);
               } else if (deleteError.code === 403) {
                 console.error(`Permission denied to delete event ${evt.id} for ${dateStr}`);
               } else {
