@@ -41,12 +41,10 @@ try {
   console.error("Failed to parse GOOGLE_SERVICE_ACCOUNT_KEY:", e);
 }
 
-// Authenticate helper function
+// Authenticate helper function without forcing "Home"
 const authenticate = async (calendarAccount: string) => {
-  // Force calendarAccount to "Home" if you want single-account usage
-  if (calendarAccount !== "Home") calendarAccount = "Home";
+  // Use calendarAccount as provided, no forced override
 
-  // Support nested or flat keys
   const serviceAccount = parsedServiceAccountKeys?.[calendarAccount] || parsedServiceAccountKeys;
 
   console.log(`Authenticating for ${calendarAccount}. Service account found: ${!!serviceAccount}`);
@@ -83,6 +81,7 @@ export async function GET(request: Request) {
   const action = searchParams.get("action");
   const sheetName = searchParams.get("sheetName");
   const date = searchParams.get("date");
+  const calendarAccount = searchParams.get("calendarAccount") || "Home";
 
   if (action !== "getEvents") {
     return NextResponse.json({ error: "Invalid or missing action" }, { status: 400 });
@@ -96,7 +95,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: `Invalid calendar ID for ${sheetName}` }, { status: 400 });
   }
 
-  const calendarAccount = "Home";
   const auth = await authenticate(calendarAccount);
   if (auth instanceof NextResponse) return auth;
 
@@ -117,12 +115,11 @@ export async function GET(request: Request) {
 
     const items = eventsResponse.data.items || [];
 
-    // Map Google Calendar events to your Event interface shape if needed
     const events = items.map((evt) => ({
       start: evt.start?.dateTime || "",
       end: evt.end?.dateTime || "",
       title: evt.summary || "",
-      youtubeHindi: "", // You can parse these from description if structured
+      youtubeHindi: "",
       youtubeEnglish: "",
       youtubePlaylistHindi: "",
       youtubePlaylistEnglish: "",
@@ -143,7 +140,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const { searchParams } = new URL(request.url);
   const name = searchParams.get("name") || "Vivek";
-  const calendarAccount = "Home";
+  const calendarAccount = searchParams.get("calendarAccount") || "Home";
 
   const calendarId = CALENDAR_IDS[name];
   if (!calendarId) {
