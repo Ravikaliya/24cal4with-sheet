@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock10, CalendarIcon } from "lucide-react";
@@ -104,8 +104,8 @@ const getDatesBetween = (startDate: Date, endDate: Date): string[] => {
 
 export default function EventsSheetYt() {
   const calendarAccounts = Object.keys(calendarAccountSheetsMap);
-  const selectedCalendarAccount = calendarAccounts[0]; // Use const (never changes)
-  const isRangeMode = true; // Use const (never changes)
+  const selectedCalendarAccount = calendarAccounts[0]; // Immutable
+  const isRangeMode = true; // Immutable
 
   const [sheetNames, setSheetNames] = useState<string[]>(calendarAccountSheetsMap[selectedCalendarAccount] || []);
   const [selectedName, setSelectedName] = useState<string>(
@@ -132,25 +132,23 @@ export default function EventsSheetYt() {
     }
   }, [selectedCalendarAccount]);
 
-  const fetchTodaysEvents = async () => {
+  const fetchTodaysEvents = useCallback(async () => {
     const res = await fetch(
       `/api/events-sheet-yt?action=getEvents&sheetName=${encodeURIComponent(selectedName)}&date=${selectedDate}`
     );
     if (!res.ok) throw new Error('Failed to fetch events');
     const data = await res.json();
     return data.events || [];
-  };
+  }, [selectedName, selectedDate]);
 
   useEffect(() => {
     if (selectedName !== "Select a sheet") {
       (async () => {
         try {
           const fetchedEvents = await fetchTodaysEvents();
-          // Map 24 slots
           const adjustedEvents = Array.from({ length: 24 }).map((_, index) => {
             const startHour = String(index).padStart(2, "0");
             const event = fetchedEvents[index] || {};
-            // Title: from fetched event if available, else fallback
             const title = event.title || initialEventTitles[index] || "Empty Slot";
             return {
               start: `${selectedDate}T${startHour}:00:00`,
@@ -175,14 +173,13 @@ export default function EventsSheetYt() {
         } catch (error) {
           toast.error(error instanceof Error ? error.message : "Error fetching events");
           console.error(error);
-          // fallback: populate with initialEventTitles
           updateEvents(selectedDate);
         }
       })();
     } else {
       updateEvents(selectedDate);
     }
-  }, [selectedName, selectedDate]);
+  }, [fetchTodaysEvents, selectedName, selectedDate]);
 
   const updateEvents = (date: string) => {
     const updatedEvents = Array.from({ length: 24 }).map((_, index) => {
@@ -209,9 +206,7 @@ export default function EventsSheetYt() {
     errorMessage: string
   ) => {
     try {
-      const url = `${endpoint}?name=${encodeURIComponent(selectedName)}&calendarAccount=${encodeURIComponent(
-        selectedCalendarAccount
-      )}`;
+      const url = `${endpoint}?name=${encodeURIComponent(selectedName)}&calendarAccount=${encodeURIComponent(selectedCalendarAccount)}`;
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -231,15 +226,13 @@ export default function EventsSheetYt() {
       toast.error("Please select a sheet first!");
       return;
     }
-    const eventsToAdd = events.filter((e) => e.title !== "Empty Slot");
-
+    const eventsToAdd = events.filter(e => e.title !== "Empty Slot");
     const datesToProcess =
       isRangeMode && dateRange?.from && dateRange?.to ? getDatesBetween(dateRange.from, dateRange.to) : [selectedDate];
 
     if (isRangeMode && datesToProcess.length > 1) {
       const confirmed = window.confirm(
-        `Are you sure you want to add events to ${datesToProcess.length} days (${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]
-        })?`
+        `Are you sure you want to add events to ${datesToProcess.length} days (${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]})?`
       );
       if (!confirmed) return;
     }
@@ -266,8 +259,7 @@ export default function EventsSheetYt() {
       isRangeMode && dateRange?.from && dateRange?.to ? getDatesBetween(dateRange.from, dateRange.to) : [selectedDate];
     if (isRangeMode && datesToProcess.length > 1) {
       const confirmed = window.confirm(
-        `Are you sure you want to remove events from ${datesToProcess.length} days (${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]
-        })?`
+        `Are you sure you want to remove events from ${datesToProcess.length} days (${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]})?`
       );
       if (!confirmed) return;
     }
@@ -291,12 +283,8 @@ export default function EventsSheetYt() {
       title: newTitle,
       youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(newTitle + " in Hindi")}`,
       youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(newTitle + " in English")}`,
-      youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(
-        newTitle + " playlist in Hindi"
-      )}&sp=EgIQAw%3D%3D`,
-      youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(
-        newTitle + " playlist in English"
-      )}&sp=EgIQAw%3D%3D`,
+      youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(newTitle + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
+      youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(newTitle + " playlist in English")}&sp=EgIQAw%3D%3D`,
     };
     setEvents(updatedEvents);
   };
@@ -330,12 +318,8 @@ export default function EventsSheetYt() {
         title,
         youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
         youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
-        youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(
-          title + " playlist in Hindi"
-        )}&sp=EgIQAw%3D%3D`,
-        youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(
-          title + " playlist in English"
-        )}&sp=EgIQAw%3D%3D`,
+        youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
+        youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in English")}&sp=EgIQAw%3D%3D`,
         timeZone: "Asia/Kolkata",
       };
     });
