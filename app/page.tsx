@@ -83,7 +83,7 @@ const initialEventTitles: string[] = [
 ];
 
 const calendarAccountSheetsMap: Record<string, string[]> = {
-  Home: ["Achal", "Neeraj", "Salman", "Vivek", "Jyoti", "Govt", "Ravi"],
+  Home: ["Achal", "Neeraj", "Salman", "Vivek", "Jyoti", "Govt", "Office", "Ravi"],
 };
 
 const getDatesBetween = (startDate: Date, endDate: Date): string[] => {
@@ -396,6 +396,7 @@ export default function EventsSheetYt() {
             value={bulkInput}
             onChange={(e) => setBulkInput(e.target.value)}
             placeholder="Paste comma-separated data here"
+            spellCheck={false}
           />
           <Button onClick={handleBulkPaste}>Apply Paste</Button>
           <Button variant="destructive" onClick={clearBulkInput}>×</Button>
@@ -418,7 +419,7 @@ export default function EventsSheetYt() {
 
       <div className="grid md:grid-cols-6 gap-4">
         {events.map((event, index) => {
-          const startHour = String(index).padStart(1, "0");
+          const startHour = String(index).padStart(2, "0");
           return (
             <Card key={index} className="p-2 gap-1">
               <CardHeader className="p-0">
