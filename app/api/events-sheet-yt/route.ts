@@ -13,11 +13,7 @@ const CALENDAR_IDS: { [key: string]: string | undefined } = {
   Vivek: process.env.Vivek_Calendar_ID,
   Jyoti: process.env.Jyoti_Calendar_ID,
   Ravi: process.env.Ravi_Calendar_ID,
-<<<<<<< HEAD
-  Office: process.env.Office_ID,
-=======
   Office: process.env.Office_ID,            // Make sure this is defined in your .env
->>>>>>> 0021827 (Fix Time + Office ID  Calender added)
   Govt: process.env.Govt_Calendar_ID,
   // Add others as needed
 };
@@ -76,22 +72,6 @@ const authenticate = async (calendarAccount: string) => {
   }
 };
 
-// Helper to convert any ISO datetime string to IST ISO string with +05:30 offset
-function toIST(dateTimeStr: string): string {
-  if (!dateTimeStr) return "";
-  const date = new Date(dateTimeStr);
-  const IST_OFFSET = 330; // minutes offset for IST
-
-  // time in milliseconds in UTC + IST offset
-  const utc = date.getTime() + (date.getTimezoneOffset() * 60000);
-  const istDate = new Date(utc + IST_OFFSET * 60000);
-
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  const isoDate = `${istDate.getUTCFullYear()}-${pad(istDate.getUTCMonth() + 1)}-${pad(istDate.getUTCDate())}`;
-  const isoTime = `${pad(istDate.getUTCHours())}:${pad(istDate.getUTCMinutes())}:${pad(istDate.getUTCSeconds())}`;
-
-  return `${isoDate}T${isoTime}+05:30`;
-}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -135,8 +115,8 @@ export async function GET(request: Request) {
 
     // Convert event times to IST before returning
     const events = items.map((evt) => ({
-      start: toIST(evt.start?.dateTime || ""),
-      end: toIST(evt.end?.dateTime || ""),
+      start: evt.start?.dateTime || "",
+      end: evt.end?.dateTime || "",
       title: evt.summary || "",
       youtubeHindi: "",
       youtubeEnglish: "",
