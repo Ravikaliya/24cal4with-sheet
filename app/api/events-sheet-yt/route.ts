@@ -71,6 +71,23 @@ const authenticate = async (calendarAccount: string) => {
   }
 };
 
+// Helper to convert any ISO datetime string to IST ISO string with +05:30 offset
+function toIST(dateTimeStr: string): string {
+  if (!dateTimeStr) return "";
+  const date = new Date(dateTimeStr);
+  const IST_OFFSET = 330; // minutes offset for IST
+
+  // time in milliseconds in UTC + IST offset
+  const utc = date.getTime() + (date.getTimezoneOffset() * 60000);
+  const istDate = new Date(utc + IST_OFFSET * 60000);
+
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const isoDate = `${istDate.getUTCFullYear()}-${pad(istDate.getUTCMonth() + 1)}-${pad(istDate.getUTCDate())}`;
+  const isoTime = `${pad(istDate.getUTCHours())}:${pad(istDate.getUTCMinutes())}:${pad(istDate.getUTCSeconds())}`;
+
+  return `${isoDate}T${isoTime}+05:30`;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const action = searchParams.get("action");
@@ -97,6 +114,7 @@ export async function GET(request: Request) {
   const timeZone = "Asia/Kolkata";
 
   try {
+    // Include +05:30 IST offset explicitly for accurate date range
     const timeMin = `${date}T00:00:00+05:30`;
     const timeMax = `${date}T23:59:59+05:30`;
 
@@ -110,9 +128,10 @@ export async function GET(request: Request) {
 
     const items = eventsResponse.data.items || [];
 
+    // Convert event times to IST before returning
     const events = items.map((evt) => ({
-      start: evt.start?.dateTime || "",
-      end: evt.end?.dateTime || "",
+      start: toIST(evt.start?.dateTime || ""),
+      end: toIST(evt.end?.dateTime || ""),
       title: evt.summary || "",
       youtubeHindi: "",
       youtubeEnglish: "",
@@ -188,12 +207,13 @@ export async function POST(request: Request) {
 
       for (const dateStr of datesToProcess) {
         for (const evt of events) {
+          // Extract hour for event start from IST formatted string "YYYY-MM-DDTHH:mm:ss+05:30"
           const hour = evt.start.split("T")[1].slice(0, 2);
 
-          const start1 = `${dateStr}T${hour}:00:00`;
-          const end1 = `${dateStr}T${hour}:05:00`;
-          const start2 = `${dateStr}T${hour}:10:00`;
-          const end2 = `${dateStr}T${hour}:50:00`;
+          const start1 = `${dateStr}T${hour}:00:00+05:30`;
+          const end1 = `${dateStr}T${hour}:05:00+05:30`;
+          const start2 = `${dateStr}T${hour}:10:00+05:30`;
+          const end2 = `${dateStr}T${hour}:50:00+05:30`;
 
           for (const [startTime, endTime] of [[start1, end1], [start2, end2]]) {
             try {
