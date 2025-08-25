@@ -38,6 +38,9 @@ interface DateRangeFormProps {
   onChange: (range: DateRange | undefined) => void;
 }
 
+const timeZone = "Asia/Kolkata";
+const IST_OFFSET_MINUTES = 330; // 5 hours 30 minutes
+
 function DateRangeForm({ value, onChange }: DateRangeFormProps) {
   return (
     <Popover>
@@ -89,8 +92,8 @@ const calendarAccountSheetsMap: Record<string, string[]> = {
 const getDatesBetween = (startDate: Date, endDate: Date): string[] => {
   const dates: string[] = [];
   const current = new Date(startDate);
-  const end = new Date(endDate);
   current.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
   end.setHours(23, 59, 59, 999);
   while (current <= end) {
     const year = current.getFullYear();
@@ -101,6 +104,30 @@ const getDatesBetween = (startDate: Date, endDate: Date): string[] => {
   }
   return dates;
 };
+
+// Convert "YYYY-MM-DDTHH:mm:ss" to ISO string with +05:30 offset without external packages.
+function toISTISOString(dateStr: string): string {
+  // Expects dateStr like "2025-08-25T10:00:00"
+  const [datePart, timePart] = dateStr.split("T");
+  const [year, month, day] = datePart.split("-").map(Number);
+  const [hour, minute, second] = timePart.split(":").map(Number);
+
+  // Calculate UTC time by subtracting IST offset (5 hours 30 minutes)
+  // UTC = IST - 5h30min
+  const utcHour = hour - 5 - (minute < 30 ? 1 : 0);
+  const utcMinute = (minute + 30) % 60;
+
+  const utcDate = new Date(Date.UTC(year, month - 1, day, utcHour, utcMinute, second));
+
+  // Format date as ISO string without milliseconds +05:30 suffix
+  const pad = (n: number) => n.toString().padStart(2, "0");
+
+  // Note: We build string from utcDate so that date/time components reflect actual UTC components
+  const isoDate = `${utcDate.getUTCFullYear()}-${pad(utcDate.getUTCMonth() + 1)}-${pad(utcDate.getUTCDate())}`;
+  const isoTime = `${pad(utcDate.getUTCHours())}:${pad(utcDate.getUTCMinutes())}:${pad(utcDate.getUTCSeconds())}`;
+
+  return `${isoDate}T${isoTime}+05:30`;
+}
 
 export default function EventsSheetYt() {
   const calendarAccounts = Object.keys(calendarAccountSheetsMap);
@@ -117,9 +144,11 @@ export default function EventsSheetYt() {
   const [events, setEvents] = useState<Event[]>([]);
   const [bulkInput, setBulkInput] = useState<string>("");
 
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const [selectedDate, setSelectedDate] = useState<string>(tomorrow.toISOString().split("T")[0]);
+  // Default date tomorrow in UTC+5:30 time zone expressed as YYYY-MM-DD
+  const now = new Date();
+  const tomorrow = new Date(now.getTime() + 86400000);
+  const estDate = new Date(tomorrow.getTime() + (330 + tomorrow.getTimezoneOffset()) * 60000); // adjust to IST offset
+  const [selectedDate, setSelectedDate] = useState<string>(estDate.toISOString().slice(0, 10));
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
   useEffect(() => {
@@ -166,7 +195,7 @@ export default function EventsSheetYt() {
               youtubePlaylistEnglish:
                 event.youtubePlaylistEnglish ||
                 `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in English")}&sp=EgIQAw%3D%3D`,
-              timeZone: event.timeZone || "Asia/Kolkata",
+              timeZone,
             };
           });
           setEvents(adjustedEvents);
@@ -193,7 +222,7 @@ export default function EventsSheetYt() {
         youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
         youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
         youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in English")}&sp=EgIQAw%3D%3D`,
-        timeZone: "Asia/Kolkata",
+        timeZone,
       };
     });
     setEvents(updatedEvents);
@@ -237,11 +266,17 @@ export default function EventsSheetYt() {
       if (!confirmed) return;
     }
 
+    const eventsWithISOs = eventsToAdd.map(evt => ({
+      ...evt,
+      start: toISTISOString(evt.start),
+      end: toISTISOString(evt.end),
+    }));
+
     await handleEventAction(
       "/api/events-sheet-yt",
       {
         action: "addAll",
-        events: eventsToAdd,
+        events: eventsWithISOs,
         dates: datesToProcess,
         isRangeMode,
       },
@@ -320,7 +355,7 @@ export default function EventsSheetYt() {
         youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
         youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
         youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in English")}&sp=EgIQAw%3D%3D`,
-        timeZone: "Asia/Kolkata",
+        timeZone,
       };
     });
 
