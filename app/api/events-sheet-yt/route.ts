@@ -5,7 +5,7 @@ const SCOPES = [
   "https://www.googleapis.com/auth/calendar",
 ];
 
-// Map sheet/account names to calendar ID environment variables
+// Map calendar sheet names to their environment variable IDs
 const CALENDAR_IDS: { [key: string]: string | undefined } = {
   Achal: process.env.Achal_Calendar_ID,
   Neeraj: process.env.Neeraj_Calendar_ID,
@@ -13,6 +13,7 @@ const CALENDAR_IDS: { [key: string]: string | undefined } = {
   Vivek: process.env.Vivek_Calendar_ID,
   Jyoti: process.env.Jyoti_Calendar_ID,
   Ravi: process.env.Ravi_Calendar_ID,
+  Office: process.env.Office_ID,            // Make sure this is defined in your .env
   Govt: process.env.Govt_Calendar_ID,
   // Add others as needed
 };
@@ -28,7 +29,6 @@ interface Event {
   timeZone: string;
 }
 
-// Parse and cache google service account keys from env variable
 let parsedServiceAccountKeys: any;
 try {
   if (!process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
@@ -41,10 +41,7 @@ try {
   console.error("Failed to parse GOOGLE_SERVICE_ACCOUNT_KEY:", e);
 }
 
-// Authenticate helper function without forcing "Home"
 const authenticate = async (calendarAccount: string) => {
-  // Use calendarAccount as provided, no forced override
-
   const serviceAccount = parsedServiceAccountKeys?.[calendarAccount] || parsedServiceAccountKeys;
 
   console.log(`Authenticating for ${calendarAccount}. Service account found: ${!!serviceAccount}`);
@@ -75,7 +72,6 @@ const authenticate = async (calendarAccount: string) => {
   }
 };
 
-// GET handler - fetch events for given sheetName and date
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const action = searchParams.get("action");
@@ -136,7 +132,6 @@ export async function GET(request: Request) {
   }
 }
 
-// POST handler - add or remove events based on action
 export async function POST(request: Request) {
   const { searchParams } = new URL(request.url);
   const name = searchParams.get("name") || "Vivek";

@@ -83,7 +83,7 @@ const initialEventTitles: string[] = [
 ];
 
 const calendarAccountSheetsMap: Record<string, string[]> = {
-  Home: ["Achal", "Neeraj", "Salman", "Vivek", "Jyoti", "Govt", "Ravi"],
+  Home: ["Achal", "Neeraj", "Salman", "Vivek", "Jyoti", "Govt", "Office", "Ravi"],
 };
 
 const getDatesBetween = (startDate: Date, endDate: Date): string[] => {
@@ -104,8 +104,8 @@ const getDatesBetween = (startDate: Date, endDate: Date): string[] => {
 
 export default function EventsSheetYt() {
   const calendarAccounts = Object.keys(calendarAccountSheetsMap);
-  const selectedCalendarAccount = calendarAccounts[0]; // Immutable
-  const isRangeMode = true; // Immutable
+  const selectedCalendarAccount = calendarAccounts[0];
+  const isRangeMode = true;
 
   const [sheetNames, setSheetNames] = useState<string[]>(calendarAccountSheetsMap[selectedCalendarAccount] || []);
   const [selectedName, setSelectedName] = useState<string>(
@@ -179,7 +179,7 @@ export default function EventsSheetYt() {
     } else {
       updateEvents(selectedDate);
     }
-  }, [fetchTodaysEvents, selectedName, selectedDate]);
+  }, [fetchTodaysEvents]);
 
   const updateEvents = (date: string) => {
     const updatedEvents = Array.from({ length: 24 }).map((_, index) => {
@@ -214,7 +214,7 @@ export default function EventsSheetYt() {
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || errorMessage);
-      toast.success(successMessage);
+      toast.success(result.message || successMessage);
     } catch (error) {
       toast.error((error instanceof Error ? error.message : String(error)) || errorMessage);
       console.error("Error in handleEventAction:", error);
@@ -245,7 +245,7 @@ export default function EventsSheetYt() {
         dates: datesToProcess,
         isRangeMode,
       },
-      `Events added to calendar for ${datesToProcess.length} day(s) and sheet updated successfully!`,
+      `Events added successfully!`,
       "Failed to add events or update sheet!"
     );
   };
@@ -270,7 +270,7 @@ export default function EventsSheetYt() {
         dates: datesToProcess,
         isRangeMode,
       },
-      `Events removed from calendar for ${datesToProcess.length} day(s) and sheet cleared successfully!`,
+      `Events removed successfully!`,
       "Failed to remove events or clear sheet!"
     );
     updateEvents(selectedDate);
@@ -368,7 +368,6 @@ export default function EventsSheetYt() {
 
   return (
     <div className="p-4 h-dvh">
-      {/* Controls */}
       <div className="mb-4">
         <div className="flex flex-wrap lg:flex-nowrap gap-2 items-center">
           <DropdownMenu>
@@ -397,11 +396,10 @@ export default function EventsSheetYt() {
             value={bulkInput}
             onChange={(e) => setBulkInput(e.target.value)}
             placeholder="Paste comma-separated data here"
+            spellCheck={false}
           />
           <Button onClick={handleBulkPaste}>Apply Paste</Button>
-          <Button variant="destructive" onClick={clearBulkInput}>
-            ×
-          </Button>
+          <Button variant="destructive" onClick={clearBulkInput}>×</Button>
         </div>
         <div className="mt-2 text-sm text-gray-600 font-bold">
           {isRangeMode ? (
@@ -419,17 +417,16 @@ export default function EventsSheetYt() {
         </div>
       </div>
 
-      {/* Events grid */}
       <div className="grid md:grid-cols-6 gap-4">
         {events.map((event, index) => {
-          const startHour = String(index).padStart(1, "0");
+          const startHour = String(index).padStart(2, "0");
           return (
             <Card key={index} className="p-2 gap-1">
               <CardHeader className="p-0">
                 <div className="flex justify-between items-center gap-1">
                   <Badge>
                     <Clock10 className="w-4 h-4 mr-1" />
-                    {`${startHour}`}
+                    {startHour}
                   </Badge>
                   <Badge>
                     <Clock10 className="w-4 h-4 mr-1" />
@@ -468,7 +465,6 @@ export default function EventsSheetYt() {
         })}
       </div>
 
-      {/* Bottom controls */}
       <div className="flex gap-2 flex-col lg:flex-row justify-end mt-4 items-center">
         <Button
           variant="default"
@@ -476,8 +472,7 @@ export default function EventsSheetYt() {
           disabled={isRangeMode && (!dateRange?.from || !dateRange?.to)}
         >
           {isRangeMode
-            ? `Add Events to Range ${dateRange?.from && dateRange?.to ? `(${getDatesBetween(dateRange.from, dateRange.to).length} days)` : ""
-            }`
+            ? `Add Events to Range ${dateRange?.from && dateRange?.to ? `(${getDatesBetween(dateRange.from, dateRange.to).length} days)` : ""}`
             : "Add All Events"}
         </Button>
         <Button
@@ -486,8 +481,7 @@ export default function EventsSheetYt() {
           disabled={isRangeMode && (!dateRange?.from || !dateRange?.to)}
         >
           {isRangeMode
-            ? `Remove Events from Range ${dateRange?.from && dateRange?.to ? `(${getDatesBetween(dateRange.from, dateRange.to).length} days)` : ""
-            }`
+            ? `Remove Events from Range ${dateRange?.from && dateRange?.to ? `(${getDatesBetween(dateRange.from, dateRange.to).length} days)` : ""}`
             : "Remove All Events"}
         </Button>
       </div>
