@@ -5,6 +5,7 @@ const SCOPES = [
   "https://www.googleapis.com/auth/calendar",
 ];
 
+// Map calendar sheet names to their environment variable IDs
 const CALENDAR_IDS: { [key: string]: string | undefined } = {
   Achal: process.env.Achal_Calendar_ID,
   Neeraj: process.env.Neeraj_Calendar_ID,
@@ -12,7 +13,11 @@ const CALENDAR_IDS: { [key: string]: string | undefined } = {
   Vivek: process.env.Vivek_Calendar_ID,
   Jyoti: process.env.Jyoti_Calendar_ID,
   Ravi: process.env.Ravi_Calendar_ID,
+<<<<<<< HEAD
   Office: process.env.Office_ID,
+=======
+  Office: process.env.Office_ID,            // Make sure this is defined in your .env
+>>>>>>> 0021827 (Fix Time + Office ID  Calender added)
   Govt: process.env.Govt_Calendar_ID,
   // Add others as needed
 };
