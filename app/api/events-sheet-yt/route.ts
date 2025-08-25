@@ -5,6 +5,7 @@ const SCOPES = [
   "https://www.googleapis.com/auth/calendar",
 ];
 
+// Map calendar sheet names to their environment variable IDs
 const CALENDAR_IDS: { [key: string]: string | undefined } = {
   Achal: process.env.Achal_Calendar_ID,
   Neeraj: process.env.Neeraj_Calendar_ID,
@@ -12,7 +13,7 @@ const CALENDAR_IDS: { [key: string]: string | undefined } = {
   Vivek: process.env.Vivek_Calendar_ID,
   Jyoti: process.env.Jyoti_Calendar_ID,
   Ravi: process.env.Ravi_Calendar_ID,
-  Office: process.env.Office_ID,
+  Office: process.env.Office_ID,            // Make sure this is defined in your .env
   Govt: process.env.Govt_Calendar_ID,
   // Add others as needed
 };
@@ -71,6 +72,7 @@ const authenticate = async (calendarAccount: string) => {
   }
 };
 
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const action = searchParams.get("action");
@@ -97,6 +99,7 @@ export async function GET(request: Request) {
   const timeZone = "Asia/Kolkata";
 
   try {
+    // Include +05:30 IST offset explicitly for accurate date range
     const timeMin = `${date}T00:00:00+05:30`;
     const timeMax = `${date}T23:59:59+05:30`;
 
@@ -110,6 +113,7 @@ export async function GET(request: Request) {
 
     const items = eventsResponse.data.items || [];
 
+    // Convert event times to IST before returning
     const events = items.map((evt) => ({
       start: evt.start?.dateTime || "",
       end: evt.end?.dateTime || "",
@@ -188,12 +192,13 @@ export async function POST(request: Request) {
 
       for (const dateStr of datesToProcess) {
         for (const evt of events) {
+          // Extract hour for event start from IST formatted string "YYYY-MM-DDTHH:mm:ss+05:30"
           const hour = evt.start.split("T")[1].slice(0, 2);
 
-          const start1 = `${dateStr}T${hour}:00:00`;
-          const end1 = `${dateStr}T${hour}:05:00`;
-          const start2 = `${dateStr}T${hour}:10:00`;
-          const end2 = `${dateStr}T${hour}:50:00`;
+          const start1 = `${dateStr}T${hour}:00:00+05:30`;
+          const end1 = `${dateStr}T${hour}:05:00+05:30`;
+          const start2 = `${dateStr}T${hour}:10:00+05:30`;
+          const end2 = `${dateStr}T${hour}:50:00+05:30`;
 
           for (const [startTime, endTime] of [[start1, end1], [start2, end2]]) {
             try {
