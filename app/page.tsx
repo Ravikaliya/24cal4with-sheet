@@ -123,7 +123,7 @@ export default function EventsSheetYt() {
   // Default date tomorrow in UTC+5:30 time zone expressed as YYYY-MM-DD
   const now = new Date();
   const tomorrow = new Date(now.getTime() + 86400000);
-  const estDate = new Date(tomorrow.getTime() + (330 + tomorrow.getTimezoneOffset()) * 60000); // adjust to IST offset
+  const estDate = new Date(tomorrow.getTime() + (tomorrow.getTimezoneOffset()) * 60000); // adjust to IST offset
   const [selectedDate, setSelectedDate] = useState<string>(estDate.toISOString().slice(0, 10));
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
