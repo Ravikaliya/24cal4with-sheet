@@ -127,6 +127,24 @@ export default function EventsSheetYt() {
   const [selectedDate, setSelectedDate] = useState<string>(estDate.toISOString().slice(0, 10));
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
+  const updateEvents = (date: string) => {
+    const updatedEvents = Array.from({ length: 24 }).map((_, index) => {
+      const startHour = String(index).padStart(2, "0");
+      const title = initialEventTitles[index] || "Empty Slot";
+      return {
+        start: `${date}T${startHour}:00:00`,
+        end: `${date}T${startHour}:50:00`,
+        title,
+        youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
+        youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
+        youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
+        youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in English")}&sp=EgIQAw%3D%3D`,
+        timeZone,
+      };
+    });
+    setEvents(updatedEvents);
+  };
+  
   useEffect(() => {
     const sheets = calendarAccountSheetsMap[selectedCalendarAccount] || [];
     setSheetNames(sheets);
@@ -184,25 +202,9 @@ export default function EventsSheetYt() {
     } else {
       updateEvents(selectedDate);
     }
-  }, [fetchTodaysEvents]);
+  }, [fetchTodaysEvents, selectedDate, selectedName, updateEvents]); // ← Fixed: Added all dependencies
 
-  const updateEvents = (date: string) => {
-    const updatedEvents = Array.from({ length: 24 }).map((_, index) => {
-      const startHour = String(index).padStart(2, "0");
-      const title = initialEventTitles[index] || "Empty Slot";
-      return {
-        start: `${date}T${startHour}:00:00`,
-        end: `${date}T${startHour}:50:00`,
-        title,
-        youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
-        youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
-        youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
-        youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in English")}&sp=EgIQAw%3D%3D`,
-        timeZone,
-      };
-    });
-    setEvents(updatedEvents);
-  };
+
 
   const handleEventAction = async (
     endpoint: string,
