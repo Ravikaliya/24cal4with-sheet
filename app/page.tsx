@@ -39,7 +39,6 @@ interface DateRangeFormProps {
 }
 
 const timeZone = "Asia/Kolkata";
-const IST_OFFSET_MINUTES = 330; // 5 hours 30 minutes
 
 function DateRangeForm({ value, onChange }: DateRangeFormProps) {
   return (
@@ -105,29 +104,6 @@ const getDatesBetween = (startDate: Date, endDate: Date): string[] => {
   return dates;
 };
 
-// Convert "YYYY-MM-DDTHH:mm:ss" to ISO string with +05:30 offset without external packages.
-function toISTISOString(dateStr: string): string {
-  // Expects dateStr like "2025-08-25T10:00:00"
-  const [datePart, timePart] = dateStr.split("T");
-  const [year, month, day] = datePart.split("-").map(Number);
-  const [hour, minute, second] = timePart.split(":").map(Number);
-
-  // Calculate UTC time by subtracting IST offset (5 hours 30 minutes)
-  // UTC = IST - 5h30min
-  const utcHour = hour - 5 - (minute < 30 ? 1 : 0);
-  const utcMinute = (minute + 30) % 60;
-
-  const utcDate = new Date(Date.UTC(year, month - 1, day, utcHour, utcMinute, second));
-
-  // Format date as ISO string without milliseconds +05:30 suffix
-  const pad = (n: number) => n.toString().padStart(2, "0");
-
-  // Note: We build string from utcDate so that date/time components reflect actual UTC components
-  const isoDate = `${utcDate.getUTCFullYear()}-${pad(utcDate.getUTCMonth() + 1)}-${pad(utcDate.getUTCDate())}`;
-  const isoTime = `${pad(utcDate.getUTCHours())}:${pad(utcDate.getUTCMinutes())}:${pad(utcDate.getUTCSeconds())}`;
-
-  return `${isoDate}T${isoTime}+05:30`;
-}
 
 export default function EventsSheetYt() {
   const calendarAccounts = Object.keys(calendarAccountSheetsMap);
