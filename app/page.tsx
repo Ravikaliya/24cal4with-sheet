@@ -268,8 +268,8 @@ export default function EventsSheetYt() {
 
     const eventsWithISOs = eventsToAdd.map(evt => ({
       ...evt,
-      start: toISTISOString(evt.start),
-      end: toISTISOString(evt.end),
+      start: evt.start,
+      end: evt.end,
     }));
 
     await handleEventAction(
