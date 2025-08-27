@@ -1,3 +1,4 @@
+// events-sheet-yt API route (Next.js 13+ app directory structure)
 import { google, calendar_v3 } from "googleapis";
 import { NextResponse } from "next/server";
 
@@ -5,7 +6,7 @@ const SCOPES = [
   "https://www.googleapis.com/auth/calendar",
 ];
 
-// Ensure that your .env variables match calendar sheet keys here exactly
+// Updated: calendar IDs map to include Home and DBT(K).
 const CALENDAR_IDS: { [key: string]: string | undefined } = {
   Achal: process.env.Achal_Calendar_ID,
   Neeraj: process.env.Neeraj_Calendar_ID,
@@ -15,6 +16,8 @@ const CALENDAR_IDS: { [key: string]: string | undefined } = {
   Ravi: process.env.Ravi_Calendar_ID,
   Office: process.env.Office_ID,
   Govt: process.env.Govt_Calendar_ID,
+  Home: process.env.Home_ID,
+  "DBT(K)": process.env.DBTK_ID,
 };
 
 interface Event {
@@ -42,7 +45,6 @@ try {
 
 const authenticate = async (calendarAccount: string) => {
   const serviceAccount = parsedServiceAccountKeys?.[calendarAccount] || parsedServiceAccountKeys;
-
   if (!serviceAccount) {
     console.error(`Missing service account credentials for ${calendarAccount}`);
     return NextResponse.json(
@@ -94,6 +96,7 @@ export async function GET(request: Request) {
   const calendar = google.calendar({ version: "v3", auth });
 
   try {
+    // Ensure RFC3339 string with correct offset for IST (Google Calendar API requirement)
     const timeMin = `${date}T00:00:00+05:30`;
     const timeMax = `${date}T23:59:59+05:30`;
 
@@ -130,7 +133,6 @@ export async function POST(request: Request) {
   const { searchParams } = new URL(request.url);
   const name = searchParams.get("name") || "Vivek";
   const calendarAccount = searchParams.get("calendarAccount") || "Home";
-
   const calendarId = CALENDAR_IDS[name];
   if (!calendarId) {
     console.error(`Invalid or missing calendar ID for name: ${name}`);
@@ -156,11 +158,7 @@ export async function POST(request: Request) {
   }
 
   const { action, events, selectedDate, dates, isRangeMode } = body;
-
-  if (!action) {
-    return NextResponse.json({ error: "Missing action" }, { status: 400 });
-  }
-
+  if (!action) return NextResponse.json({ error: "Missing action" }, { status: 400 });
   const datesToProcess = dates && dates.length > 0 ? dates : (selectedDate ? [selectedDate] : []);
   if (!datesToProcess.length) {
     return NextResponse.json({ error: "No dates specified" }, { status: 400 });
@@ -174,12 +172,11 @@ export async function POST(request: Request) {
       if (!events || !Array.isArray(events)) {
         return NextResponse.json({ error: "Events must be an array" }, { status: 400 });
       }
-
       let totalAdded = 0;
       for (const dateStr of datesToProcess) {
         for (const evt of events) {
           const hour = evt.start.split("T")[1].slice(0, 2);
-
+          // Two slots per hour, both must be RFC3339 with +05:30
           const slots: [string, string][] = [
             [`${dateStr}T${hour}:00:00+05:30`, `${dateStr}T${hour}:05:00+05:30`],
             [`${dateStr}T${hour}:10:00+05:30`, `${dateStr}T${hour}:50:00+05:30`],
@@ -220,7 +217,6 @@ export async function POST(request: Request) {
       for (const dateStr of datesToProcess) {
         const timeMin = `${dateStr}T00:00:00+05:30`;
         const timeMax = `${dateStr}T23:59:59+05:30`;
-
         let pageToken: string | undefined;
         const toDelete: calendar_v3.Schema$Event[] = [];
 

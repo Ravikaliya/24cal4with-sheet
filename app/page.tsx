@@ -85,7 +85,8 @@ const initialEventTitles: string[] = [
 ];
 
 const calendarAccountSheetsMap: Record<string, string[]> = {
-  Home: ["Achal", "Neeraj", "Salman", "Vivek", "Jyoti", "Govt", "Office", "Ravi"],
+  // Home: ["Achal", "Neeraj", "Salman", "Vivek", "Jyoti", "Govt", "Office", "Ravi"],
+  Home: ["Govt", "Office", "Ravi", "Home", "DBT(K)"],
 };
 
 const getDatesBetween = (startDate: Date, endDate: Date): string[] => {
@@ -144,7 +145,7 @@ export default function EventsSheetYt() {
     });
     setEvents(updatedEvents);
   };
-  
+
   useEffect(() => {
     const sheets = calendarAccountSheetsMap[selectedCalendarAccount] || [];
     setSheetNames(sheets);
