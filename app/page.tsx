@@ -22,6 +22,10 @@ import { CalendarForm } from "@/components/comp/InputDate";
 import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 
+
+const CARD_COUNT = 18; // Only 18 slots
+const START_HOUR = 5;  // 5am to 10pm
+
 interface Event {
   start: string;
   end: string;
@@ -80,13 +84,12 @@ function DateRangeForm({ value, onChange }: DateRangeFormProps) {
 const initialEventTitles: string[] = [
   "HTML", "CSS", "JavaScript", "TypeScript", "React", "Next.js", "Vue.js", "Angular",
   "Svelte", "Tailwind CSS", "Bootstrap", "Node.js", "Express.js", "Django", "Flask",
-  "Spring Boot", "GraphQL", "REST API", "MongoDB", "PostgreSQL", "MySQL", "Firebase",
-  "AWS", "Docker",
+  "Spring Boot", "GraphQL", "REST API"
 ];
 
 const calendarAccountSheetsMap: Record<string, string[]> = {
-  // Home: ["Achal", "Neeraj", "Salman", "Vivek", "Jyoti", "Govt", "Office", "Ravi"],
-  Home: ["Govt", "Office", "Ravi", "Home", "DBT(K)"],
+  Home: ["Govt", "Home", "DBT(K)"],
+  Office: ["Office", "Trip"],
 };
 
 const getDatesBetween = (startDate: Date, endDate: Date): string[] => {
@@ -105,6 +108,9 @@ const getDatesBetween = (startDate: Date, endDate: Date): string[] => {
   return dates;
 };
 
+// Set today as the default date and range
+const today = new Date();
+today.setHours(0, 0, 0, 0);
 
 export default function EventsSheetYt() {
   const calendarAccounts = Object.keys(calendarAccountSheetsMap);
@@ -113,44 +119,46 @@ export default function EventsSheetYt() {
 
   const [sheetNames, setSheetNames] = useState<string[]>(calendarAccountSheetsMap[selectedCalendarAccount] || []);
   const [selectedName, setSelectedName] = useState<string>(
-    selectedCalendarAccount === "Home" && calendarAccountSheetsMap.Home.includes("Ravi")
-      ? "Ravi"
+    selectedCalendarAccount === "Home" && calendarAccountSheetsMap.Home.includes("Home")
+      ? "Home"
       : "Select a sheet"
   );
 
   const [events, setEvents] = useState<Event[]>([]);
   const [bulkInput, setBulkInput] = useState<string>("");
 
-  // Default date tomorrow in UTC+5:30 time zone expressed as YYYY-MM-DD
-  const now = new Date();
-  const tomorrow = new Date(now.getTime() + 86400000);
-  const estDate = new Date(tomorrow.getTime() + (tomorrow.getTimezoneOffset()) * 60000); // adjust to IST offset
-  const [selectedDate, setSelectedDate] = useState<string>(estDate.toISOString().slice(0, 10));
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  // Here dateRange allows undefined to fix TS errors
+  const [selectedDate, setSelectedDate] = useState<string>(today.toISOString().slice(0, 10));
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: today, to: today });
 
+  // Generate slots from START_HOUR hour to START_HOUR + CARD_COUNT; skip empty titles
   const updateEvents = (date: string) => {
-    const updatedEvents = Array.from({ length: 24 }).map((_, index) => {
-      const startHour = String(index).padStart(2, "0");
-      const title = initialEventTitles[index] || "Empty Slot";
-      return {
-        start: `${date}T${startHour}:00:00`,
-        end: `${date}T${startHour}:50:00`,
-        title,
-        youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
-        youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
-        youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
-        youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in English")}&sp=EgIQAw%3D%3D`,
-        timeZone,
-      };
-    });
+    const updatedEvents = Array.from({ length: CARD_COUNT })
+      .map((_, idx) => {
+        const hour = idx + START_HOUR;
+        const startHour = String(hour).padStart(2, "0");
+        const title = initialEventTitles[idx];
+        if (!title || title.trim() === "" || title === "Empty Slot") return null;
+        return {
+          start: `${date}T${startHour}:00:00`,
+          end: `${date}T${startHour}:50:00`,
+          title,
+          youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
+          youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
+          youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
+          youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in English")}&sp=EgIQAw%3D%3D`,
+          timeZone,
+        };
+      })
+      .filter(evt => evt !== null) as Event[];
     setEvents(updatedEvents);
   };
 
   useEffect(() => {
     const sheets = calendarAccountSheetsMap[selectedCalendarAccount] || [];
     setSheetNames(sheets);
-    if (selectedCalendarAccount === "Home" && sheets.includes("Ravi")) {
-      setSelectedName("Ravi");
+    if (selectedCalendarAccount === "Home" && sheets.includes("Home")) {
+      setSelectedName("Home");
     } else {
       setSelectedName("Select a sheet");
     }
@@ -170,42 +178,35 @@ export default function EventsSheetYt() {
       (async () => {
         try {
           const fetchedEvents = await fetchTodaysEvents();
-          const adjustedEvents = Array.from({ length: 24 }).map((_, index) => {
-            const startHour = String(index).padStart(2, "0");
-            const event = fetchedEvents[index] || {};
-            const title = event.title || initialEventTitles[index] || "Empty Slot";
-            return {
-              start: `${selectedDate}T${startHour}:00:00`,
-              end: `${selectedDate}T${startHour}:50:00`,
-              title,
-              youtubeHindi:
-                event.youtubeHindi ||
-                `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
-              youtubeEnglish:
-                event.youtubeEnglish ||
-                `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
-              youtubePlaylistHindi:
-                event.youtubePlaylistHindi ||
-                `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
-              youtubePlaylistEnglish:
-                event.youtubePlaylistEnglish ||
-                `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in English")}&sp=EgIQAw%3D%3D`,
-              timeZone,
-            };
-          });
+          const adjustedEvents = Array.from({ length: CARD_COUNT })
+            .map((_, idx) => {
+              const hour = idx + START_HOUR;
+              const startHour = String(hour).padStart(2, "0");
+              const event = fetchedEvents[idx] || {};
+              const title = event.title || initialEventTitles[idx];
+              if (!title || title.trim() === "" || title === "Empty Slot") return null;
+              return {
+                start: `${selectedDate}T${startHour}:00:00`,
+                end: `${selectedDate}T${startHour}:50:00`,
+                title,
+                youtubeHindi: event.youtubeHindi || `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
+                youtubeEnglish: event.youtubeEnglish || `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
+                youtubePlaylistHindi: event.youtubePlaylistHindi || `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
+                youtubePlaylistEnglish: event.youtubePlaylistEnglish || `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in English")}&sp=EgIQAw%3D%3D`,
+                timeZone,
+              };
+            })
+            .filter(evt => evt !== null) as Event[];
           setEvents(adjustedEvents);
         } catch (error) {
           toast.error(error instanceof Error ? error.message : "Error fetching events");
-          console.error(error);
           updateEvents(selectedDate);
         }
       })();
     } else {
       updateEvents(selectedDate);
     }
-  }, [fetchTodaysEvents, selectedDate, selectedName, updateEvents]); // ← Fixed: Added all dependencies
-
-
+  }, [fetchTodaysEvents, selectedDate, selectedName]);
 
   const handleEventAction = async (
     endpoint: string,
@@ -234,28 +235,20 @@ export default function EventsSheetYt() {
       toast.error("Please select a sheet first!");
       return;
     }
-    const eventsToAdd = events.filter(e => e.title !== "Empty Slot");
+    const eventsToAdd = events.filter(e => e.title && e.title.trim() !== "" && e.title !== "Empty Slot");
     const datesToProcess =
       isRangeMode && dateRange?.from && dateRange?.to ? getDatesBetween(dateRange.from, dateRange.to) : [selectedDate];
-
     if (isRangeMode && datesToProcess.length > 1) {
       const confirmed = window.confirm(
         `Are you sure you want to add events to ${datesToProcess.length} days (${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]})?`
       );
       if (!confirmed) return;
     }
-
-    const eventsWithISOs = eventsToAdd.map(evt => ({
-      ...evt,
-      start: evt.start,
-      end: evt.end,
-    }));
-
     await handleEventAction(
       "/api/events-sheet-yt",
       {
         action: "addAll",
-        events: eventsWithISOs,
+        events: eventsToAdd,
         dates: datesToProcess,
         isRangeMode,
       },
@@ -317,27 +310,29 @@ export default function EventsSheetYt() {
         const title = words.slice(0, 2).join(" ");
         pastedTitles.push(title);
       }
-      if (pastedTitles.length >= 24) break;
+      if (pastedTitles.length >= CARD_COUNT) break;
     }
-    while (pastedTitles.length < 24) {
+    while (pastedTitles.length < CARD_COUNT) {
       pastedTitles.push(initialEventTitles[pastedTitles.length] || "Empty Slot");
     }
-
-    const updatedEvents = Array.from({ length: 24 }).map((_, index) => {
-      const startHour = String(index).padStart(2, "0");
-      const title = pastedTitles[index];
-      return {
-        start: `${selectedDate}T${startHour}:00:00`,
-        end: `${selectedDate}T${startHour}:50:00`,
-        title,
-        youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
-        youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
-        youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
-        youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in English")}&sp=EgIQAw%3D%3D`,
-        timeZone,
-      };
-    });
-
+    const updatedEvents = Array.from({ length: CARD_COUNT })
+      .map((_, idx) => {
+        const hour = idx + START_HOUR;
+        const startHour = String(hour).padStart(2, "0");
+        const title = pastedTitles[idx];
+        if (!title || title.trim() === "" || title === "Empty Slot") return null;
+        return {
+          start: `${selectedDate}T${startHour}:00:00`,
+          end: `${selectedDate}T${startHour}:50:00`,
+          title,
+          youtubeHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in Hindi")}`,
+          youtubeEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " in English")}`,
+          youtubePlaylistHindi: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in Hindi")}&sp=EgIQAw%3D%3D`,
+          youtubePlaylistEnglish: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " playlist in English")}&sp=EgIQAw%3D%3D`,
+          timeZone,
+        };
+      })
+      .filter(evt => evt !== null) as Event[];
     setEvents(updatedEvents);
     setBulkInput("");
     toast.success("Events updated from pasted data");
@@ -433,7 +428,8 @@ export default function EventsSheetYt() {
 
       <div className="grid md:grid-cols-6 gap-4">
         {events.map((event, index) => {
-          const startHour = String(index).padStart(2, "0");
+          const hour = index + START_HOUR;
+          const startHour = String(hour).padStart(2, "0");
           return (
             <Card key={index} className="p-2 gap-1">
               <CardHeader className="p-0">
