@@ -86,7 +86,7 @@ const initialEventTitles: string[] = [
 ];
 
 const calendarAccountSheetsMap: Record<string, string[]> = {
-  Home: ["Achal", "Neeraj", "Salman", "Vivek", "Jyoti", "Govt", "Office", "Ravi"],
+  Home: ["Ravi"],
 };
 
 const getDatesBetween = (startDate: Date, endDate: Date): string[] => {
